@@ -27,13 +27,12 @@ However, this approach does not scale as the number of clients grows.
 (lightweight threads?)
 (cite Erlang)
 
-A lightweight method is to use \t{epoll} or \t{kquery}.
-This requires the application programmer to manually maintain a state machine
-with 
-
-Requires a lot of complex but straightforward code which is difficult to debug.
-Unsurprisingly, there exist many thin C/C++ wrappers, but these still require
-...
+A lightweight method is to use nonblocking IO and a multiplexing
+facility such as \t{select}, \t{poll}, \t{epoll} or \t{kquery}.  This
+requires the application programmer to structure the code as a state
+machine, which is tedious, time-consuming, and error-prone. 
+Unsurprisingly, there exist many thin
+C/C++ wrappers, but these still require ...
 
 and provide no assurance that the program ...
 
@@ -42,6 +41,8 @@ and provide no assurance that the program ...
 We present a domain-specific language which provides a simple
 
 easily extensible with more protocol definitions
+
+generates an explicit state-machine representation of the application logic
 
 outputs C code to be linked with the rest of the server code.
 
