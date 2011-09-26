@@ -1,7 +1,9 @@
 \documentclass{article}
+\usepackage{cite}
+\renewcommand{\t}{\texttt}
 
 \title{15-744 Project Proposal}
-\author{Carlo Angiuli and Michael Sullivan}
+\author{Carlo Angiuli \and Michael Sullivan}
 \date{September 28, 2011}
 
 \begin{document}
@@ -11,5 +13,49 @@
 %  - problem statement
 %  - state-of-the-art
 %  - work plan / milestones
+
+\section{Motivation}
+
+It's good for network applications to be able to support many simultaneous
+connections---this is known as the C10K (``10,000 client'') problem\cite{c10k}. 
+
+Simultaneous client connections require an application to maintain multiple
+states at once. A classic way to do this is to spawn a thread for each client.
+However, this approach does not scale as the number of clients grows. 
+
+(nonblocking?)
+(lightweight threads?)
+(cite Erlang)
+
+A lightweight method is to use \t{epoll} or \t{kquery}.
+This requires the application programmer to manually maintain a state machine
+with 
+
+Requires a lot of complex but straightforward code which is difficult to debug.
+Unsurprisingly, there exist many thin C/C++ wrappers, but these still require
+...
+
+and provide no assurance that the program ...
+
+\section{Proposal}
+
+We present a domain-specific language which provides a simple
+
+easily extensible with more protocol definitions
+
+outputs C code to be linked with the rest of the server code.
+
+formal guarantees: given our abstract specification of \t{epoll}, our DSL
+generates code with the following properties...
+
+embedded in Haskell: natively allows functional metaprogramming,
+leverages native type system
+
+\section{Milestones}
+
+
+
+\bibliography{citations}{}
+\bibliographystyle{plain}
 
 \end{document}

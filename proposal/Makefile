@@ -1,10 +1,13 @@
 .PHONY: clean reallyclean
 
-proposal.pdf: proposal.tex
-	pdflatex $<
+NAME=proposal
+
+${NAME}.pdf: ${NAME}.tex citations.bib
+	pdflatex ${NAME} && bibtex ${NAME} && \
+	pdflatex ${NAME} && pdflatex ${NAME}
 
 clean:
-	-rm proposal.aux proposal.log
+	-rm ${NAME}.aux ${NAME}.log ${NAME}.bbl ${NAME}.blg
 
 reallyclean: clean
-	-rm proposal.pdf
+	-rm ${NAME}.pdf
