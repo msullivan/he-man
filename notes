@@ -1,0 +1,42 @@
+10/19 ideas
+--------------------------------------------------------------------------------
+
+multiple threads:
+  epoll
+  asynch IO
+
+primitives:
+  spawn "thread"
+  interface to non-blocking calls
+  interface to block until ready
+
+communicate buffer to other C code
+
+assuming no thread can expect either file or network IO (at once)...
+  avoid synchronization between dueling event loops
+let threads yield anyway?
+  
+
+
+web server thread:
+
+read (blocking)
+parse request
+  sanity-check file name
+open file (blocking)
+compute response header
+  write response header (blocking)
+  exit or the following loop
+loop
+  read from file (blocking)
+  write to network (blocking)
+  -- can we fill the read buffer while sending on the network?
+
+web server top-level:
+
+set up socket
+open socket
+loop
+  accept network (blocking)
+  spawn thread (non-blocking)
+
