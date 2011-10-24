@@ -4,8 +4,13 @@ module CLib where
 
 import Language.C hiding (cChar)
 import qualified Language.C
---import Language.C.Data.Ident
 
+-- Miscellaneous {{{
+
+cTopLevel ns = CTranslUnit ns undefNode
+ident = internalIdent
+
+-- }}}
 -- Types {{{
 
 cVoid = CTypeSpec $ CVoidType undefNode
@@ -20,25 +25,56 @@ cBool = CTypeSpec $ CBoolType undefNode
 -- TODO enums
 --cTypedef ident = CTypeDef ident undefNode
 
--- }}}
--- Identifiers {{{
-
--- TODO better to use namesStartingFrom :: Int -> [Name]
-noname = head $ newNameSupply
-
-ident name = mkIdent nopos name noname
+-- Type qualifiers
+cConst = CConstQual undefNode
+cStatic = CStatic undefNode
+cExtern = CExtern undefNode
+-- CTypedef ??
 
 -- }}}
 -- Declarations {{{
 
-cDeclr ident declrs = CDeclr (Just ident) declrs Nothing [] undefNode
+-- Declarators (internal)
+cDeclr id declrs = CDeclr (Just $ ident id) declrs Nothing [] undefNode
 cDeclrFun params = CFunDeclr (Right (params,False)) [] undefNode
 
-cFunction ident params return body = CFDefExt $ CFunDef
-  [return] (cDeclr ident [cDeclrFun params]) [] body undefNode
+-- Declarators
+cFunction id params return body = CFDefExt $ CFunDef
+  [return] (cDeclr id [cDeclrFun params]) [] body undefNode
+--cDeclExt  
+
+-- CDecl [declaration specifier]
+--       [(maybe declarator, maybe initializer, maybe expression)] undefNode
+
+-- Initializers
+cInitExpr expr = CInitExpr expr undefNode
+
+{-
+(CTranslUnit [CFDefExt (CFunDef [CTypeSpec (CIntType undefNode)] (CDeclr (Just
+"main") [CFunDeclr (Right ([],False)) [] undefNode] Nothing [] undefNode) []
+(CCompound [] [
+
+-- int a[5];
+CBlockDecl (CDecl [cInt] [(Just (CDeclr (Just "a") [CArrDeclr [] (CArrSize False
+(cIntConst 5)) undefNode] Nothing [] undefNode),Nothing,Nothing)] undefNode),
+
+-- int* b = NULL;
+CBlockDecl (CDecl [cInt] [(Just (CDeclr (Just "b") [CPtrDeclr [] undefNode]
+Nothing [] undefNode),Just (CInitExpr (CVar "NULL" undefNode)
+undefNode),Nothing)] undefNode),
+
+-- int c = 0;
+CBlockDecl (CDecl [cInt] [(Just (CDeclr (Just "c") [] Nothing [] undefNode),Just
+(cInitExpr (cIntConst 0)),Nothing)] undefNode)
+
+] undefNode)
+undefNode)] undefNode)
+-}
 
 -- }}}
 -- Expressions {{{
+
+cComma exprs = CComma exprs undefNode
 
 -- Assignment operators
 cAssignOp assop lhs rhs = CAssign assop lhs rhs undefNode 
@@ -54,7 +90,7 @@ cAndEq = cAssignOp CAndAssOp
 cXorEq = cAssignOp CXorAssOp
 cOrEq = cAssignOp COrAssOp
 
--- TODO CCond
+cTernary test conseq alt = CCond test (Just conseq) alt undefNode
 
 -- Binary operators
 cBinaryOp binop expr1 expr2 = CBinary binop expr1 expr2 undefNode
@@ -95,10 +131,11 @@ cSizeofExpr expr = CSizeofExpr expr undefNode
 
 cIndex arr ind = CIndex arr ind undefNode
 cCall fun args = CCall fun args undefNode
-cDot expr ident = CMember expr ident False undefNode
-cArrow expr ident = CMember expr ident True undefNode
-cVar ident = CVar ident undefNode
+cDot expr id = CMember expr (ident id) False undefNode
+cArrow expr id = CMember expr (ident id) True undefNode
+cVar id = CVar (ident id) undefNode
 
+-- Constants
 cIntConst x = CConst $ CIntConst (cInteger x) undefNode
 cCharConst x = CConst $ CCharConst (Language.C.cChar x) undefNode
 cStrConst x = CConst $ CStrConst (cString x) undefNode
@@ -106,51 +143,75 @@ cStrConst x = CConst $ CStrConst (cString x) undefNode
 -- }}}
 -- Statements {{{
 
+-- Switch
 cCase expr stmt = CCase expr stmt undefNode
 cDefault stmt = CDefault stmt undefNode
+cSwitch' expr stmt = CSwitch expr stmt undefNode
+cBreak = CBreak undefNode
+-- CExpr -> [(Maybe CExpression, [CStatement])] -> CStatement
+cSwitch expr cases = cSwitch' expr (cCompound (map (Left . f) cases)) where
+  f (Nothing,stmts) = cDefault $ cCompound $ map Left (stmts ++ [cBreak])
+  f (Just expr,stmts) = cCase expr $ cCompound $ map Left (stmts ++ [cBreak])
+
 cExpr expr = CExpr (Just expr) undefNode
-cCompound stmts = CCompound [] stmts undefNode
--- TODO avoid wrapping block items with CBlockItem constructors
--- CIf
-cSwitch expr stmt = CSwitch expr stmt undefNode
--- TODO work on this
+
+-- Left = CStatement; Right = CDeclaration
+cCompound stmts = CCompound [] stmts' undefNode where
+  stmts' = map (either CBlockStmt CBlockDecl) stmts
+
+cIfThen expr conseq = CIf expr conseq Nothing undefNode
+cIfThenElse expr conseq alt = CIf expr conseq (Just alt) undefNode
+
+-- Looping constructs
+cWhile expr stmt = CWhile expr stmt False undefNode
+cDoWhile expr stmt = CWhile expr stmt True undefNode
+cFor expr1 expr2 expr3 stmt = CFor (Left expr1) expr2 expr3 stmt undefNode
+cForDecl decl expr2 expr3 stmt = CFor (Right decl) expr2 expr3 stmt undefNode
+cContinue = CCont undefNode
+
 cReturn expr = CReturn (Just expr) undefNode
 cReturnVoid = CReturn Nothing undefNode
 
 -- }}}
-
--- Temp
-
-{-
--}
-
-cTopLevel ns = CTranslUnit ns undefNode
-
 -- Tests {{{
 
 test1 = print $ pretty $ cTopLevel
   [CDeclExt (CDecl [cInt]
-                   [(Just (cDeclr (ident "x") []),Nothing,Nothing)]
+                   [(Just (cDeclr "x" []),Nothing,Nothing)]
                    undefNode)]
 
 test2 = print $ pretty $ cTopLevel
-  [cFunction (ident "main") [] cInt
-   (cCompound [CBlockStmt (cReturn (cIntConst 0))])]
+  [cFunction "main" [] cInt
+   (cCompound [Left (cReturn (cIntConst 0))])]
 
 test3 = print $ pretty $ cTopLevel
-  [cFunction (ident "main") [] cInt
-   (cCompound [CBlockStmt (cExpr (cAssign (cVar (ident "x")) (cIntConst 2)))])]
+  [cFunction "main" [] cInt
+   (cCompound [Left (cExpr (cAssign (cVar "x") (cIntConst 2)))])]
 
 test4 = print $ pretty $ cTopLevel
-  [cFunction (ident "main") [] cVoid
-   (cCompound [CBlockStmt (cExpr (cCall (cVar (ident "f")) [cIntConst 0])),
-               CBlockStmt (cExpr (cIndex (cVar (ident "a")) (cIntConst 1))),
-               CBlockStmt (cExpr (cDot (cVar (ident "x")) (ident "foo"))),
-               CBlockStmt cReturnVoid
+  [cFunction "main" [] cVoid
+   (cCompound [Left (cExpr (cCall (cVar "f") [cIntConst 0])),
+               Left (cExpr (cIndex (cVar "a") (cIntConst 1))),
+               Left (cExpr (cDot (cVar "x") "foo")),
+               Left (cExpr (cTernary (cVar "x") (cVar "x") (cVar "x"))),
+               Left (cExpr (cComma [cVar "x",cVar "y"])),
+               Left cReturnVoid
                ])]
 
 test5 = print $ pretty $ cTopLevel
-  [
-  ]
+  [cFunction "main" [] cInt
+   (cCompound [Left (cSwitch (cVar "f")
+                     [(Just (cIntConst 1),[cExpr $ cVar "x"]),
+                      (Nothing,[cExpr $ cVar "y"])]),
+               Left (cWhile (cVar "x") (cExpr $ cVar "y")),
+               Left (cFor (Just (cVar "x")) (Just (cVar "y")) (Just (cVar "z"))
+                           (cExpr $ cIntConst 0)),
+               Left (cReturn (cIntConst 0))
+               ])]
+
+test6 = print $ pretty $ cTopLevel
+  [cFunction "main" [] cInt
+   (cCompound [
+               ])]
 
 -- }}}
