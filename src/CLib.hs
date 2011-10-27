@@ -21,55 +21,48 @@ cLong = CTypeSpec $ CLongType undefNode
 cSigned = CTypeSpec $ CSignedType undefNode
 cUnsig = CTypeSpec $ CUnsigType undefNode
 cBool = CTypeSpec $ CBoolType undefNode
+
 -- TODO structs and unions
 -- TODO enums
 --cTypedef ident = CTypeDef ident undefNode
 
--- Type qualifiers
-cConst = CConstQual undefNode
-cStatic = CStatic undefNode
-cExtern = CExtern undefNode
--- CTypedef ??
-
 -- }}}
 -- Declarations {{{
 
--- Declarators (internal)
-cDeclr id declrs = CDeclr (Just $ ident id) declrs Nothing [] undefNode
-cDeclrFun params = CFunDeclr (Right (params,False)) [] undefNode
+-- Toplevel declarations
+cDecl typ = cTopDecl [typ]
+cDeclStatic typ = cTopDecl [cStatic,typ]
+cDeclExtern typ = cTopDecl [cExtern,typ]
+
+cTopDecl typSpecs derivDecls id init = CDecl typSpecs
+  [(Just $ cDeclr id derivDecls,initExpr,Nothing)] undefNode
+  where initExpr = init >>= (Just . cInit)
+
+-- Structure declarations
+
+
+-- CTypedef ??
 
 -- Declarators
-cFunction id params return body = CFDefExt $ CFunDef
-  [return] (cDeclr id [cDeclrFun params]) [] body undefNode
---cDeclExt  
+cDeclr id derivDecl = CDeclr (Just $ ident id) derivDecl Nothing [] undefNode
 
--- CDecl [declaration specifier]
---       [(maybe declarator, maybe initializer, maybe expression)] undefNode
+-- Derived declarators
+cPtr = CPtrDeclr [] undefNode
+cArray Nothing = CArrDeclr [] (CNoArrSize True) undefNode
+cArray (Just expr) = CArrDeclr [] (CArrSize False expr) undefNode
+cFun params = CFunDeclr (Right (params,False)) [] undefNode
+
+-- Storage specifiers
+cStatic = CStorageSpec $ CStatic undefNode
+cExtern = CStorageSpec $ CExtern undefNode
+
+-- Declarators
+cFunction id params retTyp body = CFDefExt $ CFunDef
+  [retTyp] (cDeclr id [cFun params]) [] body undefNode
+--cDeclExt ??
 
 -- Initializers
-cInitExpr expr = CInitExpr expr undefNode
-
-{-
-(CTranslUnit [CFDefExt (CFunDef [CTypeSpec (CIntType undefNode)] (CDeclr (Just
-"main") [CFunDeclr (Right ([],False)) [] undefNode] Nothing [] undefNode) []
-(CCompound [] [
-
--- int a[5];
-CBlockDecl (CDecl [cInt] [(Just (CDeclr (Just "a") [CArrDeclr [] (CArrSize False
-(cIntConst 5)) undefNode] Nothing [] undefNode),Nothing,Nothing)] undefNode),
-
--- int* b = NULL;
-CBlockDecl (CDecl [cInt] [(Just (CDeclr (Just "b") [CPtrDeclr [] undefNode]
-Nothing [] undefNode),Just (CInitExpr (CVar "NULL" undefNode)
-undefNode),Nothing)] undefNode),
-
--- int c = 0;
-CBlockDecl (CDecl [cInt] [(Just (CDeclr (Just "c") [] Nothing [] undefNode),Just
-(cInitExpr (cIntConst 0)),Nothing)] undefNode)
-
-] undefNode)
-undefNode)] undefNode)
--}
+cInit expr = CInitExpr expr undefNode
 
 -- }}}
 -- Expressions {{{
@@ -211,7 +204,10 @@ test5 = print $ pretty $ cTopLevel
 
 test6 = print $ pretty $ cTopLevel
   [cFunction "main" [] cInt
-   (cCompound [
+   (cCompound [Right $ cDecl cChar [] "a" Nothing,
+               Right $ cDecl cInt [cArray $ Just $ cIntConst 5] "b" Nothing,
+               Right $ cDecl cInt [cPtr] "c" (Just $ cIntConst 0),
+               Right $ cDecl cInt [cPtr] "c" (Just $ cVar "null")
                ])]
 
 -- }}}
