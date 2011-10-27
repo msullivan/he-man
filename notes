@@ -75,3 +75,84 @@ the glibc AIO library doesn't use special kernel support, but instead
 spawns threads. Also, it isn't clear that there are any good ways to
 wait on AIO completion that don't involve scanning through all of the
 AIO events. I'm looking into whethere there are other options.
+
+OK, async IO should be just fine. There is a poorly documented
+linux-specific facility (with wrappers in libaio) that seems to
+actually be what we want. You can register AIO requests. The function
+to wait for them takes a timeout and returns a list of completed
+event.
+Furthermore, each request can be associated with an eventfd that will
+be signaled when it is completed.
+
+Can async IO things return short?
+
+-----------------------------------------------
+To merge the event loop, it looks like we want to use eventfd.
+There are a bunch of different ways we could do this.
+We could have one eventfd per fd we are doing async IO on, but that
+seems higher overhead than necessary.
+
+One important constraint in designing this interaction is that neither
+normal epoll events or aio events should starve the other. If there
+is lots of activity on both, both should be getting handled.
+
+eventfd's have a 64-bit integer value associated with them internally.
+It will incremented by each completed aio event by the kernel.
+There are two modes for the eventfd:
+  - In semaphore mode, if the value is nonzero, read() return 1 and
+  decrements the value.
+  - In normal mode, if the value is nonzero, read() returns the value
+  and sets the value to zero.
+
+
+With the aio fd, we actually need to worry about the edge triggered
+vs. level triggered thing. 
+There are couple ways to do this I think of (avoiding starvation is an
+important concern):
+ - We could put the eventfd in semaphore mode and keep it level
+ triggered. Then, whenever epoll returns the eventfd event,
+ read from it and then wait for an aio event (which shouldn't
+ block). One downside is that since there is just one aio event, it
+ might get returned less often when there are lots of active network
+ connections (since the buffer that gets filled with the events is
+ fixed size). Two improvements to this include trying to handle many
+ aio events each time the aio event triggers (by reading from the
+ eventfd until it returns EAGAIN or we get N events). Furthermore, we
+ can make it so that we always try a nonblocking read from the eventfd
+ each time through the loop, regardless of whether it has been
+ signaled.
+ - Put the eventfd in regular mode (don't know how much the triggering
+ matters). We then track whether there might be finished aio
+ requests. There might be finished aio requests if we have received an
+ eventfd notification since the last time aio indicated there were no
+ more completed requests. Note that as soon as the eventfd is read,
+ the value is set to zero, even though all the aio events haven't been
+ handled. Thus, if we think there might be unhandled aio events, we
+ need to make epoll not block. We probably want to try reading from
+ aio regardless of whether we think there might be finished events, so
+ that we don't need to wait for epoll to pick that to return.
+
+I think I like the second option more. The first seems simpler at
+first (you don't need to track whether to make nonblocking epoll
+calls), but when it is developed fully it isn't really simpler and it
+makes more system calls. 
+
+Then, pseudocode for the main loop is something like:
+(MAX_EVENTS is probably something like 8? I dunno)
+
+expect_aio = false
+while true:
+    aio_events = io_getevents(...stuff.., MAX_EVENTS)
+    if (len(aio_events) < MAX_EVENTS):
+		expect_aio = false
+	for event in aio:
+		handle_aio_event(event)
+
+	epoll_timeout = if expect_aio then 0 else infinity
+	epoll_events = epoll_wait(...stuff..., MAX_EVENTS, epoll_timeout)
+	for event in epoll_events:
+		if event.fd = eventfd:
+			read(eventfd)
+			expect_aio = true
+		else:
+			handle_epoll_event(event)
