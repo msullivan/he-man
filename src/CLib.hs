@@ -22,31 +22,50 @@ cSigned = CTypeSpec $ CSignedType undefNode
 cUnsig = CTypeSpec $ CUnsigType undefNode
 cBool = CTypeSpec $ CBoolType undefNode
 
--- TODO structs and unions
+-- Structs and unions
+cStruct id = cStructUnion CStructTag id Nothing
+cUnion id = cStructUnion CUnionTag id Nothing
+
+cStructUnion tag id decls = CTypeSpec $ CSUType
+  (CStruct tag (Just $ ident id) decls [] undefNode) undefNode
+
 -- TODO enums
---cTypedef ident = CTypeDef ident undefNode
 
 -- }}}
 -- Declarations {{{
 
--- Toplevel declarations
-cDecl typ = cTopDecl [typ]
-cDeclStatic typ = cTopDecl [cStatic,typ]
-cDeclExtern typ = cTopDecl [cExtern,typ]
+cDecl typ = cDecl' [typ]
+cDeclStatic typ = cDecl' [cStatic,typ]
+cDeclExtern typ = cDecl' [cExtern,typ]
 
-cTopDecl typSpecs derivDecls id init = CDecl typSpecs
-  [(Just $ cDeclr id derivDecls,initExpr,Nothing)] undefNode
+cDecl' typSpecs indirs id init = CDecl typSpecs
+  [(Just $ cDeclr id indirs,initExpr,Nothing)] undefNode
   where initExpr = init >>= (Just . cInit)
 
+-- Top-level declarations
+cTopDecl typ indirs id init = CDeclExt $ cDecl typ indirs id init
+cTopDeclStatic typ indirs id init = CDeclExt $ cDeclStatic typ indirs id init
+cTopDeclExtern typ indirs id init = CDeclExt $ cDeclExtern typ indirs id init
+
+-- Type name declarations
+cTypeDecl indirs declr = CDeclExt $ CDecl [declr]
+  [(Just $ cAbstractDeclr indirs,Nothing,Nothing)] undefNode
+
+-- Typedefs
+cTypedef indirs typ id = CDeclExt $ cDecl'
+  [CStorageSpec $ CTypedef undefNode,typ] indirs id Nothing
+
 -- Structure declarations
+cStructDecl id decls = cTypeDecl [] $ cStructUnion CStructTag id (Just decls)
+cUnionDecl id decls = cTypeDecl [] $ cStructUnion CUnionTag id (Just decls)
 
-
--- CTypedef ??
+-- Parameter declarations?
 
 -- Declarators
-cDeclr id derivDecl = CDeclr (Just $ ident id) derivDecl Nothing [] undefNode
+cDeclr id indirs = CDeclr (Just $ ident id) indirs Nothing [] undefNode
+cAbstractDeclr indirs = CDeclr Nothing indirs Nothing [] undefNode
 
--- Derived declarators
+-- Indirections (derived declarators)
 cPtr = CPtrDeclr [] undefNode
 cArray Nothing = CArrDeclr [] (CNoArrSize True) undefNode
 cArray (Just expr) = CArrDeclr [] (CArrSize False expr) undefNode
@@ -59,7 +78,6 @@ cExtern = CStorageSpec $ CExtern undefNode
 -- Declarators
 cFunction id params retTyp body = CFDefExt $ CFunDef
   [retTyp] (cDeclr id [cFun params]) [] body undefNode
---cDeclExt ??
 
 -- Initializers
 cInit expr = CInitExpr expr undefNode
@@ -203,7 +221,12 @@ test5 = print $ pretty $ cTopLevel
                ])]
 
 test6 = print $ pretty $ cTopLevel
-  [cFunction "main" [] cInt
+  [cStructDecl "Node"
+     [cDecl cInt [] "data" Nothing,
+     cDecl (cStruct "Node") [cPtr] "next" Nothing],
+   cTypedef [cPtr] (cStruct "Node") "nodeptr",
+   cTopDecl cChar [] "a" Nothing,
+   cFunction "main" [] cInt
    (cCompound [Right $ cDecl cChar [] "a" Nothing,
                Right $ cDecl cInt [cArray $ Just $ cIntConst 5] "b" Nothing,
                Right $ cDecl cInt [cPtr] "c" (Just $ cIntConst 0),
