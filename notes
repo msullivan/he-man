@@ -40,3 +40,38 @@ loop
   accept network (blocking)
   spawn thread (non-blocking)
 
+-----------------------------------------------
+epoll:
+- create an epoll instance with epoll_create
+
+edge triggered vs. level triggered:
+	 - edge triggered returns if/when an event happens
+         (when the fd *changes*):
+     - use nonblocking file descriptors
+     - wait for an even *only* if you got EAGAIN
+     - hm; what about when you reading *and* writing
+ - level triggered: return whenever there is data
+
+With level triggered, epoll can't block while there is data ready,
+which means if there is an outstanding epoll event from some thread
+but it is waiting on something else, we are screwed. If we use level
+triggered, then we need to not have active epoll events that we are
+not currently waiting on.
+
+It would be nice if we didn't need to call epoll_ctl every time a
+thread blocks on an epoll, although it isn't necessarily critical.
+(With EPOLLONESHOT, we would only need to add it before each epoll,
+but not remove it after.)
+
+So I think we want to do edge triggered and leave in events we are not
+currently waiting for. If an event comes in that nobody is blocked on,
+ignore it.
+
+- need to increase file descriptor limit
+
+-----------------------------------------------
+async IO may be a world of pain; one source I found indicates that
+the glibc AIO library doesn't use special kernel support, but instead
+spawns threads. Also, it isn't clear that there are any good ways to
+wait on AIO completion that don't involve scanning through all of the
+AIO events. I'm looking into whethere there are other options.
