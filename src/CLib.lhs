@@ -1,17 +1,26 @@
--- Wrappers for Language.C
--- Only functions starting with 'c' should be used externally.
+\section{CLib}
+This module contains wrappers for \tt{Language.C} which expose a large subset of
+its functionality. Only functions whose names begin with \tt{c} are meant for
+use outside this module.
 
+\begin{code}
 module CLib where
 
 import Language.C hiding (cChar)
 import qualified Language.C
+\end{code}
 
+\begin{code}
 -- Miscellaneous {{{
 
 cFile ns = CTranslUnit ns undefNode
 ident = internalIdent
 
 -- }}}
+\end{code}
+
+\subsection{Types}
+\begin{code}
 -- Types {{{
 
 cVoid = CTypeSpec $ CVoidType undefNode
@@ -37,6 +46,10 @@ enum id enumls = CTypeSpec $ CEnumType
   (CEnum (Just $ ident id) enumls [] undefNode) undefNode
 
 -- }}}
+\end{code}
+
+\subsection{Declarations}
+\begin{code}
 -- Declarations {{{
 
 cDecl typ = decl [typ]
@@ -86,6 +99,10 @@ cFunction id params retTyp body = CFDefExt $ CFunDef
 cInit expr = CInitExpr expr undefNode
 
 -- }}}
+\end{code}
+
+\subsection{Expressions}
+\begin{code}
 -- Expressions {{{
 
 -- Assignment operators
@@ -152,6 +169,10 @@ cCharConst x = CConst $ CCharConst (Language.C.cChar x) undefNode
 cStrConst x = CConst $ CStrConst (cString x) undefNode
 
 -- }}}
+\end{code}
+
+\subsection{Statements}
+\begin{code}
 -- Statements {{{
 
 -- Switch
@@ -183,6 +204,10 @@ cReturn expr = CReturn (Just expr) undefNode
 cReturnVoid = CReturn Nothing undefNode
 
 -- }}}
+\end{code}
+
+\subsection{Tests}
+\begin{code}
 -- Tests {{{
 
 test1 = print $ pretty $ cFile
@@ -233,3 +258,5 @@ test6 = print $ pretty $ cFile
                Left $ cExpr $ cSizeofType cInt])]
 
 -- }}}
+\end{code}
+
