@@ -29,7 +29,11 @@ cUnion id = cStructUnion CUnionTag id Nothing
 cStructUnion tag id decls = CTypeSpec $ CSUType
   (CStruct tag (Just $ ident id) decls [] undefNode) undefNode
 
--- TODO enums
+-- Enums
+cEnum id = cEnum' id Nothing
+
+cEnum' id enumls = CTypeSpec $ CEnumType
+  (CEnum (Just $ ident id) enumls [] undefNode) undefNode
 
 -- }}}
 -- Declarations {{{
@@ -58,8 +62,8 @@ cTypedef indirs typ id = CDeclExt $ cDecl'
 -- Structure declarations
 cStructDecl id decls = cTypeDecl [] $ cStructUnion CStructTag id (Just decls)
 cUnionDecl id decls = cTypeDecl [] $ cStructUnion CUnionTag id (Just decls)
-
--- Parameter declarations?
+cEnumDecl id idexps = cTypeDecl [] $ cEnum' id (Just ls)
+  where ls = map (\(id,expr) -> (ident id,expr)) idexps
 
 -- Declarators
 cDeclr id indirs = CDeclr (Just $ ident id) indirs Nothing [] undefNode
@@ -69,7 +73,6 @@ cAbstractDeclr indirs = CDeclr Nothing indirs Nothing [] undefNode
 cPtr = CPtrDeclr [] undefNode
 cArray Nothing = CArrDeclr [] (CNoArrSize True) undefNode
 cArray (Just expr) = CArrDeclr [] (CArrSize False expr) undefNode
-cFun params = CFunDeclr (Right (params,False)) [] undefNode
 
 -- Storage specifiers
 cStatic = CStorageSpec $ CStatic undefNode
@@ -77,7 +80,9 @@ cExtern = CStorageSpec $ CExtern undefNode
 
 -- Declarators
 cFunction id params retTyp body = CFDefExt $ CFunDef
-  [retTyp] (cDeclr id [cFun params]) [] body undefNode
+  [retTyp] (cDeclr id [cFun $ map f params]) [] body undefNode where
+  cFun params = CFunDeclr (Right (params,False)) [] undefNode
+  f (typ,id) = cDecl' [typ] [] id Nothing
 
 -- Initializers
 cInit expr = CInitExpr expr undefNode
@@ -124,7 +129,7 @@ cOr = cBinaryOp COrOp
 cLand = cBinaryOp CLndOp
 cLor = cBinaryOp CLorOp
 
--- TODO CCast
+cCast typ expr = CCast (CDecl [typ] [] undefNode) expr undefNode
 
 -- Unary operators
 cUnaryOp unop expr = CUnary unop expr undefNode
@@ -138,7 +143,7 @@ cNot = cUnaryOp CCompOp
 cLnot = cUnaryOp CNegOp
 
 cSizeofExpr expr = CSizeofExpr expr undefNode
--- TODO sizeoftype
+cSizeofType typ = CSizeofType (CDecl [typ] [] undefNode) undefNode
 
 cIndex arr ind = CIndex arr ind undefNode
 cCall fun args = CCall fun args undefNode
@@ -187,9 +192,7 @@ cReturnVoid = CReturn Nothing undefNode
 -- Tests {{{
 
 test1 = print $ pretty $ cTopLevel
-  [CDeclExt (CDecl [cInt]
-                   [(Just (cDeclr "x" []),Nothing,Nothing)]
-                   undefNode)]
+  [cTopDecl cInt [] "x" Nothing]
 
 test2 = print $ pretty $ cTopLevel
   [cFunction "main" [] cInt
@@ -224,13 +227,17 @@ test6 = print $ pretty $ cTopLevel
   [cStructDecl "Node"
      [cDecl cInt [] "data" Nothing,
      cDecl (cStruct "Node") [cPtr] "next" Nothing],
+   cEnumDecl "Color" [("red",Nothing),("green",Just $ cIntConst 5)],
    cTypedef [cPtr] (cStruct "Node") "nodeptr",
+   cTypedef [] (cEnum "Color") "enumcolor",
    cTopDecl cChar [] "a" Nothing,
-   cFunction "main" [] cInt
+   cFunction "main" [(cInt,"x")] cInt
    (cCompound [Right $ cDecl cChar [] "a" Nothing,
                Right $ cDecl cInt [cArray $ Just $ cIntConst 5] "b" Nothing,
                Right $ cDecl cInt [cPtr] "c" (Just $ cIntConst 0),
-               Right $ cDecl cInt [cPtr] "c" (Just $ cVar "null")
+               Right $ cDecl cInt [cPtr] "c" (Just $ cVar "null"),
+               Left $ cExpr $ cCast cInt (cIntConst 0),
+               Left $ cExpr $ cSizeofType cInt
                ])]
 
 -- }}}
