@@ -1,9 +1,32 @@
 \documentclass{article}
 \usepackage{fullpage}
-\usepackage{verbatim}
+\usepackage[dvipsnames,usenames]{color}
 \renewcommand{\tt}{\texttt}
-\newenvironment{code}{\small\verbatim}{\endverbatim\normalsize}
-\newenvironment{egcode}{\small\verbatim}{\endverbatim\normalsize}
+
+\usepackage{listings}
+\lstset{
+  language=Haskell,
+  basicstyle=\small\ttfamily,
+  frame=trbl,
+  basewidth={0.5em,0.45em},
+  commentstyle=\ttfamily\color{ForestGreen},
+  literate=*{+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+            {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+            {\\\\}{{\char`\\\char`\\}}1
+            {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+            {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2 
+            {\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
+            {>>}{{>>}}2 {>>=}{{>>=}}2
+            {|}{{$\mid$}}1
+}
+
+\lstnewenvironment{egcode}
+  {\lstset{frame=TRBL}}
+  {\lstset{frame=trbl}}
+
+\lstnewenvironment{code}
+  {}
+  {}
 
 \begin{document}
 
