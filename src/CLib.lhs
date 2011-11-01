@@ -10,6 +10,8 @@ import Language.C hiding (cChar)
 import qualified Language.C
 \end{code}
 
+Using \tt{Language.C.Pretty.pretty}, we can pretty-print any C entity, although
+in general we are interested in \tt{CTranslationUnit}s, which TODO
 \begin{code}
 -- Miscellaneous {{{
 
@@ -101,8 +103,7 @@ cInit expr = CInitExpr expr undefNode
 
 % }}}
 \subsection{Expressions} % {{{
-C expressions (C99 6.5) are \tt{CExpression}s. They compute a value, designate
-an object or function, generate side effects, or a combination of these.
+C expressions (C99 6.5) are \tt{CExpression}s.
 
 We define assignment operators, e.g., \tt{cAssign (cVar "x") (cIntConst 0)} is
 \tt{x = 0};
@@ -167,67 +168,95 @@ cCharConst x = CConst $ CCharConst (Language.C.cChar x) undefNode
 cStrConst x = CConst $ CStrConst (cString x) undefNode
 \end{code}
 %
-and a variety of other constructs. TODO
+and a variety of other constructs. Below, \tt{typ} arguments are
+\tt{CDeclarationSpecifier}s, and \tt{id}s are \tt{String}s.
 \begin{code}
-cCast typ expr = CCast (CDecl [typ] [] undefNode) expr undefNode
-cSizeofExpr expr = CSizeofExpr expr undefNode
-cSizeofType typ = CSizeofType (CDecl [typ] [] undefNode) undefNode
+cCast typ expr = CCast (CDecl [typ] [] undefNode) expr undefNode -- (typ) expr
+cSizeofExpr expr = CSizeofExpr expr undefNode                    -- sizeof(expr)
+cSizeofType typ = CSizeofType(CDecl [typ] [] undefNode) undefNode -- sizeof(typ)
 
-cTernary test conseq alt = CCond test (Just conseq) alt undefNode
-cComma exprs = CComma exprs undefNode
-cIndex arr ind = CIndex arr ind undefNode
-cCall fun args = CCall fun args undefNode
-cDot expr id = CMember expr (ident id) False undefNode
-cArrow expr id = CMember expr (ident id) True undefNode
-cVar id = CVar (ident id) undefNode
+cTernary e1 e2 e3 = CCond e1 (Just e2) e3 undefNode     -- e1 ? e2 : e3
+cComma exprs = CComma exprs undefNode                   -- (expr1, expr2 ...)
+cIndex expr ind = CIndex expr ind undefNode             -- expr[ind]
+cCall expr args = CCall expr args undefNode             -- expr(args ...)
+cDot expr id = CMember expr (ident id) False undefNode  -- expr.id
+cArrow expr id = CMember expr (ident id) True undefNode -- expr->id
+cVar id = CVar (ident id) undefNode                     -- id
 \end{code}
 
 % }}}
 \subsection{Statements} % {{{
+C statements (C99 6.8) are \tt{CStatement}s.
+
+Any expression is a statement, as is the null statement.
 \begin{code}
--- Switch
-cCase expr stmt = CCase expr stmt undefNode
-cDefault stmt = CDefault stmt undefNode
-cSwitch expr stmt = CSwitch expr stmt undefNode
-cBreak = CBreak undefNode
--- :: CExpr -> [(Maybe CExpression, [CStatement])] -> CStatement
-cSwitchBlock expr cases = cSwitch expr (cCompound (map (Left . f) cases))
-  where
-  f (Nothing,stmts) = cDefault $ cCompound $ map Left (stmts ++ [cBreak])
-  f (Just expr,stmts) = cCase expr $ cCompound $ map Left (stmts ++ [cBreak])
-
 cExpr expr = CExpr (Just expr) undefNode
+cNull = CExpr Nothing undefNode
+\end{code}
 
--- Left = CStatement; Right = CDeclaration
+A list of statements (\tt{Left}) and/or declarations (\tt{Right}) comprise a
+compound statement.
+\begin{code}
 cCompound stmts = CCompound [] stmts' undefNode where
   stmts' = map (either CBlockStmt CBlockDecl) stmts
+\end{code}
 
+\tt{if} takes an expression, a \tt{then} statement, and optionally, an \tt{else}
+statement.
+\begin{code}
 cIfThen expr conseq altM = CIf expr conseq altM undefNode
+\end{code}
 
--- Looping constructs
+\tt{while} and \tt{do while} have test expressions and statement bodies.
+\begin{code}
 cWhile expr stmt = CWhile expr stmt False undefNode
 cDoWhile expr stmt = CWhile expr stmt True undefNode
-cFor exprDeclE expr2 expr3 stmt = CFor exprDeclE expr2 expr3 stmt undefNode
-cContinue = CCont undefNode
+\end{code}
 
+A \tt{for} loop has a statement body and three optional fields; the first may be
+either an expression (\tt{Left}) or a declaration (\tt{Right}), while the last
+two must be expressions.
+\begin{code}
+cFor initME expr2M expr3M stmt = CFor init expr2M expr3M stmt undefNode
+  where init = maybe (Left Nothing) (either (Left . Just) Right) initME
+\end{code}
+
+Other control-flow statements include \tt{break}, \tt{continue}, and
+\tt{return}, with or without an expression.
+\begin{code}
+cBreak = CBreak undefNode
+cContinue = CCont undefNode
 cReturn expr = CReturn (Just expr) undefNode
 cReturnVoid = CReturn Nothing undefNode
 \end{code}
+
+\tt{switch} blocks test an expression and have a statement body. Within the
+body, we may have \tt{case} or \tt{default} statements, which test an expression
+and have a statement body. 
+\begin{code}
+cSwitch expr stmt = CSwitch expr stmt undefNode
+cCase expr stmt = CCase expr stmt undefNode
+cDefault stmt = CDefault stmt undefNode
+
+-- :: CExpr -> [(Maybe CExpression, [CStatement])] -> CStatement
+cSwitchBlock expr cases = cSwitch expr (cCompound (map (Left . f) cases)) where
+  f (Nothing,stmts) = cDefault $ cCompound $ map Left (stmts ++ [cBreak])
+  f (Just expr,stmts) = cCase expr $ cCompound $ map Left (stmts ++ [cBreak])
+\end{code}
+
 % }}}
 \subsection{Tests} % {{{
 \begin{code}
-test1 = print $ pretty $ cFile
-  [cDeclExt $ cDecl cInt [] "x" Nothing]
-
-test2 = print $ pretty $ cFile
-  [cFunction "main" [] cInt
+test1 = pretty $ cFile
+  [cDeclExt $ cDecl cInt [] "x" Nothing,
+   cFunction "main" [] cInt
    (cCompound [Left (cReturn (cIntConst 0))])]
 
-test3 = print $ pretty $ cFile
-  [cFunction "main" [] cInt
+test2 = pretty $ cFile
+  [cFunction "main" [(cInt,"argc")] cInt
    (cCompound [Left (cExpr (cAssign (cVar "x") (cIntConst 2)))])]
 
-test4 = print $ pretty $ cFile
+test3 = pretty $ cFile
   [cFunction "main" [] cVoid
    (cCompound [Left (cExpr (cCall (cVar "f") [cIntConst 0])),
                Left (cExpr (cIndex (cVar "a") (cIntConst 1))),
@@ -236,18 +265,18 @@ test4 = print $ pretty $ cFile
                Left (cExpr (cComma [cVar "x",cVar "y"])),
                Left cReturnVoid])]
 
-test5 = print $ pretty $ cFile
+test4 = pretty $ cFile
   [cFunction "main" [] cInt
    (cCompound [Left (cSwitchBlock (cVar "f")
                      [(Just (cIntConst 1),[cExpr $ cVar "x"]),
                       (Nothing,[cExpr $ cVar "y"])]),
                Left (cWhile (cVar "x") (cExpr $ cVar "y")),
-               Left (cFor (Left $ Just (cVar "x"))
+               Left (cFor (Just $ Left (cVar "x"))
                           (Just (cVar "y")) (Just (cVar "z"))
                            (cExpr $ cIntConst 0)),
                Left (cReturn (cIntConst 0))])]
 
-test6 = print $ pretty $ cFile
+test5 = pretty $ cFile
   [cStructDecl "Node"
      [cDecl cInt [] "data" Nothing,
      cDecl (cStruct "Node") [cPtr] "next" Nothing],
