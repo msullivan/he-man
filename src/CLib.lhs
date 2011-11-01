@@ -2,7 +2,6 @@
 This module contains wrappers for the \tt{Language.C} AST which expose a
 sufficiently large subset of C99. Only functions whose names begin with \tt{c}
 are meant for use outside this module.
-
 \begin{code}
 module CLib where
 
@@ -11,14 +10,11 @@ import qualified Language.C
 \end{code}
 
 Using \tt{Language.C.Pretty.pretty}, we can pretty-print any C entity, although
-in general we are interested in \tt{CTranslationUnit}s, which TODO
+the main entity of interest is the file, or \tt{CTranslationUnit}, which is
+comprised of a list of \tt{CExternalDeclaration}s.
 \begin{code}
--- Miscellaneous {{{
-
-cFile ns = CTranslUnit ns undefNode
+cFile edecls = CTranslUnit edecls undefNode
 ident = internalIdent
-
--- }}}
 \end{code}
 
 \subsection{Types} % {{{
@@ -49,56 +45,76 @@ enum id enumls = CTypeSpec $ CEnumType
   (CEnum (Just $ ident id) enumls [] undefNode) undefNode
 \end{code}
 
+Finally, arbitrary identifiers may also act as types if they have been
+\tt{typedef}ed elsewhere.
+\begin{code}
+cType id = CTypeSpec $ CTypeDef (ident id) undefNode
+\end{code}
+
 % }}}
 \subsection{Declarations} % {{{
+C declarations (C99 6.7) are \tt{CDeclaration}s.
 
+A basic C declaration takes a list of \tt{CDeclarationSpecifier}s, a list of
+indirections (\tt{CDerivedDeclararator}s), an identifier, and optionally, an
+initializing expression. It may occur either at top-level or inside other
+constructs.
 \begin{code}
-cDecl typ = decl [typ]
-cDeclStatic typ = decl [cStatic,typ]
-cDeclExtern typ = decl [cExtern,typ]
+cDecl typs indirs id expr = CDecl typs
+  [(Just $ declr id indirs,init,Nothing)] undefNode
+  where init = expr >>= (\init -> Just $ CInitExpr init undefNode)
+cDeclExt typs indirs id expr = CDeclExt $ cDecl typs indirs id expr
 
-cDeclExt = CDeclExt
-
-decl typSpecs indirs id init = CDecl typSpecs
-  [(Just $ cDeclr id indirs,initExpr,Nothing)] undefNode
-  where initExpr = init >>= (Just . cInit)
-
--- Type name declarations
-typeDecl indirs declr = CDeclExt $ CDecl [declr]
-  [(Just $ cAbstractDeclr indirs,Nothing,Nothing)] undefNode
-
--- Typedefs
-cTypedef indirs typ id = CDeclExt $ decl
-  [CStorageSpec $ CTypedef undefNode,typ] indirs id Nothing
-
--- Structure declarations
-cStructDecl id decls = typeDecl [] $ structUnion CStructTag id (Just decls)
-cUnionDecl id decls = typeDecl [] $ structUnion CUnionTag id (Just decls)
-cEnumDecl id idexps = typeDecl [] $ enum id (Just ls)
-  where ls = map (\(id,expr) -> (ident id,expr)) idexps
-
--- Declarators
-cDeclr id indirs = CDeclr (Just $ ident id) indirs Nothing [] undefNode
-cAbstractDeclr indirs = CDeclr Nothing indirs Nothing [] undefNode
-
--- Indirections (derived declarators)
-cPtr = CPtrDeclr [] undefNode
-cArray Nothing = CArrDeclr [] (CNoArrSize True) undefNode
-cArray (Just expr) = CArrDeclr [] (CArrSize False expr) undefNode
-
--- Storage specifiers
+declr id indirs = CDeclr (Just $ ident id) indirs Nothing [] undefNode
+\end{code}
+%
+The list of \tt{CDeclarationSpecifier}s must end in a type, and may optionally
+be proceeded by storage specifiers:
+\begin{code}
+cAuto = CStorageSpec $ CAuto undefNode
+cRegister = CStorageSpec $ CRegister undefNode
 cStatic = CStorageSpec $ CStatic undefNode
 cExtern = CStorageSpec $ CExtern undefNode
+\end{code}
+%
+The list of indirections may contain pointer or array declarators; the latter
+optionally specifies a length expression.
+\begin{code}
+cPtr = CPtrDeclr [] undefNode
+cArray Nothing = CArrDeclr [] (CNoArrSize False) undefNode
+cArray (Just expr) = CArrDeclr [] (CArrSize False expr) undefNode
+\end{code}
 
--- Declarators
-cFunction id params retTyp body = CFDefExt $ CFunDef
-  [retTyp] (cDeclr id [cFun $ map f params]) [] body undefNode where
+We will restrict other declarations to occur at top-level. We can \tt{typedef} a
+type with indirections as another identifier. 
+\begin{code}
+cTypedef typ indirs id = CDeclExt $ cDecl
+  [CStorageSpec $ CTypedef undefNode,typ] indirs id Nothing
+\end{code}
+
+Declaring a named \tt{struct} or \tt{union} type requires an identifier and a
+list of declarations. Declaring a named \tt{enum} type requires an identifier
+and a list of pairs of an identifier and an optional expression corresponding to
+its enumeration constant.
+\begin{code}
+cStructDecl id decls = typeDecl [] $ structUnion CStructTag id (Just decls)
+cUnionDecl id decls = typeDecl [] $ structUnion CUnionTag id (Just decls)
+cEnumDecl id idExprMs = typeDecl [] $ enum id (Just ls)
+  where ls = map (\(id,expr) -> (ident id,expr)) idExprMs
+
+typeDecl indirs declr = CDeclExt $ CDecl [declr]
+  [(Just $ abstractDeclr indirs,Nothing,Nothing)] undefNode
+abstractDeclr indirs = CDeclr Nothing indirs Nothing [] undefNode
+\end{code}
+
+Function declarations require an identifier, a list of parameters, a return type
+(list), and a body statement. Each parameter is a tuple of
+\tt{CDeclarationSpecifier}s, indirections, and an identifier.
+\begin{code}
+cFunction id params typs body = CFDefExt $ CFunDef typs
+  (declr id [cFun $ map f params]) [] body undefNode where
   cFun params = CFunDeclr (Right (params,False)) [] undefNode
-  f (typ,id) = decl [typ] [] id Nothing
-
--- Initializers
-cInit expr = CInitExpr expr undefNode
-
+  f (typs,indirs,id) = cDecl typs indirs id Nothing
 \end{code}
 
 % }}}
@@ -248,16 +264,17 @@ cSwitchBlock expr cases = cSwitch expr (cCompound (map (Left . f) cases)) where
 \subsection{Tests} % {{{
 \begin{code}
 test1 = pretty $ cFile
-  [cDeclExt $ cDecl cInt [] "x" Nothing,
-   cFunction "main" [] cInt
+  [cDeclExt [cStatic,cInt] [] "x" Nothing,
+   cFunction "main" [] [cInt]
    (cCompound [Left (cReturn (cIntConst 0))])]
 
 test2 = pretty $ cFile
-  [cFunction "main" [(cInt,"argc")] cInt
+  [cFunction "main" [([cInt],[],"argc"),([cChar],[cArray Nothing,cPtr],"argv")]
+             [cInt]
    (cCompound [Left (cExpr (cAssign (cVar "x") (cIntConst 2)))])]
 
 test3 = pretty $ cFile
-  [cFunction "main" [] cVoid
+  [cFunction "main" [] [cVoid]
    (cCompound [Left (cExpr (cCall (cVar "f") [cIntConst 0])),
                Left (cExpr (cIndex (cVar "a") (cIntConst 1))),
                Left (cExpr (cDot (cVar "x") "foo")),
@@ -266,7 +283,7 @@ test3 = pretty $ cFile
                Left cReturnVoid])]
 
 test4 = pretty $ cFile
-  [cFunction "main" [] cInt
+  [cFunction "main" [] [cInt]
    (cCompound [Left (cSwitchBlock (cVar "f")
                      [(Just (cIntConst 1),[cExpr $ cVar "x"]),
                       (Nothing,[cExpr $ cVar "y"])]),
@@ -278,17 +295,18 @@ test4 = pretty $ cFile
 
 test5 = pretty $ cFile
   [cStructDecl "Node"
-     [cDecl cInt [] "data" Nothing,
-     cDecl (cStruct "Node") [cPtr] "next" Nothing],
+     [cDecl [cInt] [] "data" Nothing,
+     cDecl [cStruct "Node"] [cPtr] "next" Nothing],
    cEnumDecl "Color" [("red",Nothing),("green",Just $ cIntConst 5)],
-   cTypedef [cPtr] (cStruct "Node") "nodeptr",
-   cTypedef [] (cEnum "Color") "enumcolor",
-   cDeclExt $ cDecl cChar [] "a" Nothing,
-   cFunction "main" [(cInt,"x")] cInt
-   (cCompound [Right $ cDecl cChar [] "a" Nothing,
-               Right $ cDecl cInt [cArray $ Just $ cIntConst 5] "b" Nothing,
-               Right $ cDecl cInt [cPtr] "c" (Just $ cIntConst 0),
-               Right $ cDecl cInt [cPtr] "c" (Just $ cVar "null"),
+   cTypedef (cStruct "Node") [cPtr] "nodeptr",
+   cTypedef (cEnum "Color") [] "enumcolor",
+   cDeclExt [cType "nodeptr"] [] "node" (Just $ cVar "null"),
+   cDeclExt [cChar] [] "a" Nothing,
+   cFunction "main" [([cInt],[],"x")] [cInt]
+   (cCompound [Right $ cDecl [cChar] [] "a" Nothing,
+               Right $ cDecl [cInt] [cArray $ Just $ cIntConst 5] "b" Nothing,
+               Right $ cDecl [cInt] [cPtr] "c" (Just $ cIntConst 0),
+               Right $ cDecl [cInt] [cPtr] "c" (Just $ cVar "null"),
                Left $ cExpr $ cCast cInt (cIntConst 0),
                Left $ cExpr $ cSizeofType cInt])]
 \end{code}
