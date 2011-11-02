@@ -1,0 +1,11 @@
+We have sketched out the operations that we need in our language and have an idea how they will map onto the underlying primitives. We have infrastructure for programmatically generating C, which we will need for our backend. We have designed how the underlying event loop with interact with non-blocking network IO and async disk IO (linux's async disk IO is badly underdocumented, but seems like it has gotten pretty good by now and eventfd can be used to integrate it with epoll).
+
+Future milestones:
+- Have list of network applications to write, and rough ideas of how to 
+write them;
+- Draft syntax for DSL;
+- Draft implementation;
+- Write some test applications
+- Finalize syntax for DSL;
+- Finalize implementation.
+- Performance testing wooooo;
