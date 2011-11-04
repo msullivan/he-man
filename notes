@@ -85,6 +85,7 @@ Furthermore, each request can be associated with an eventfd that will
 be signaled when it is completed.
 
 Can async IO things return short?
+What about the max aio limit?
 
 -----------------------------------------------
 To merge the event loop, it looks like we want to use eventfd.
