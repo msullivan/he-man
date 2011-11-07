@@ -14,6 +14,7 @@
 #include <libaio.h>
 
 #include "variable_queue.h"
+#include "mainloop.h"
 //#include "thrpool.h"
 
 static char *process_name;
@@ -21,35 +22,6 @@ void fail(int status, char *fmt, ...);
 
 #define MAX_EVENTS 10
 
-Q_NEW_HEAD(event_queue_t, event_t);
-Q_NEW_HEAD(thread_queue_t, thread_t);
-
-
-static struct {
-	bool expect_aio;
-	int epoll_fd;
-	io_context_t aio_ctx;
-	int aio_eventfd;
-	struct event_t *aio_dummy_event;
-	//thread_pool_t sched_queue;
-	thread_queue_t sched_queue;
-} state;
-
-
-typedef struct thread_t {
-	//work_item_t work_item;
-	Q_NEW_LINK(thread_t) q_link;
-	int tid;
-	event_queue_t pending_events;
-	struct event_t *finished_event;
-} thread_t;
-
-typedef struct event_t {
-	Q_NEW_LINK(event_t) q_link;
-	int id;
-	bool complete;
-	thread_t *thread;
-} event_t;
 
 static void handle_event(event_t *event) {
 	thread_t *t = event->thread;
@@ -139,6 +111,8 @@ void main_loop(void)
 		do_poll(!Q_GET_HEAD(&state.sched_queue));
 	}
 }
+
+
 
 int main(int argc, char *argv[])
 {
