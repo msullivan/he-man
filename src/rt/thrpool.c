@@ -34,7 +34,7 @@ int thread_pool_init(thread_pool_t **pool, work_func *func, int max_threads)
 
 static void thread_pool_spawn_new(thread_pool_t *pool, int id)
 {
-	thread_t *thr = malloc(sizeof(thread_t));
+	worker_thread_t *thr = malloc(sizeof(worker_thread_t));
 	Q_INIT_ELEM(thr, q_link);
 	thr->id = id;
 	thr->pool = pool;
@@ -43,7 +43,7 @@ static void thread_pool_spawn_new(thread_pool_t *pool, int id)
 
 static void *thread_pool_bottom(void *data)
 {
-	thread_t *me = data;
+	worker_thread_t *me = data;
 	thread_pool_t *pool = me->pool;
 	work_item_t *work;
 
@@ -97,7 +97,7 @@ int thread_pool_push(thread_pool_t *pool, void *data)
 
 void thread_pool_debug(thread_pool_t *pool, print_func *print, FILE *out)
 {
-	thread_t *thr;
+	worker_thread_t *thr;
 	work_item_t *work;
 	
 	pthread_mutex_lock(&pool->pool_lock);
