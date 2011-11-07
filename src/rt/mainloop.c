@@ -70,7 +70,8 @@ void do_poll(bool can_sleep)
 	// Poll for aio events. Don't block.
 	int aio_cnt = io_getevents(state.aio_ctx, 0, MAX_EVENTS,
 	                           aio_events, NULL);
-	if (aio_cnt < 0) fail(1, "io_getevents: %s", strerror(-aio_cnt));
+	errno = -aio_cnt; /* phbbt */
+	if (aio_cnt < 0) { fail(1, "io_getevents"); }
 	state.expect_aio = aio_cnt == MAX_EVENTS;
 	for (int i = 0; i < aio_cnt; i++) {
 		handle_aio_event(&aio_events[i]);
@@ -87,7 +88,7 @@ void do_poll(bool can_sleep)
 			state.expect_aio = true;
 			if (read(state.aio_eventfd, &eventfd_val,
 			         sizeof(eventfd_val)) < 0)
-				fail(1, "eventfd read: %s", strerror(errno));
+				fail(1, "eventfd read");
 		} else {
 			handle_epoll_event(&epoll_events[i]);
 		}
