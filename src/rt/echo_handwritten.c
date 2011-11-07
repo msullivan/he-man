@@ -3,10 +3,6 @@
  * https://banu.com/blog/2/how-to-use-epoll-a-complete-example-in-c/
  * */
 
-// BUG: does not properly handle connections closing.
-// read and write keep returning 0. Maybe epoll tells us that
-// something is fucked, or maybe we need to use send and recv?
-
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -75,8 +71,7 @@ bool write_state(struct thread_t *thread)
 	if (count < 0 && errno == EAGAIN) {
 		register_event(thread, e->event);
 		return false;
-	} else if (count < 0) {
-		perror("read");
+	} else if (count <= 0) {
 		// XXX: cleanup!
 		return false;
 	}
@@ -101,8 +96,7 @@ bool read_state(struct thread_t *thread)
 	if (count < 0 && errno == EAGAIN) {
 		register_event(thread, e->event);
 		return false;
-	} else if (count < 0) {
-		perror("read");
+	} else if (count <= 0) {
 		// XXX: cleanup!
 		return false;
 	}
