@@ -12,6 +12,7 @@
 #include <stdbool.h>
 
 #include <libaio.h>
+#include <sys/eventfd.h>
 
 #include "variable_queue.h"
 #include "mainloop.h"
@@ -19,11 +20,39 @@
 
 static char *process_name;
 void fail(int status, char *fmt, ...);
+void fail2(int status, int err, char *fmt, ...);
 
 #define MAX_EVENTS 10
+#define MAX_AIO_EVENTS 100 // dunno what this should be...
+
+static struct {
+	bool expect_aio;
+	int epoll_fd;
+	io_context_t aio_ctx;
+	int aio_eventfd;
+	struct event_t *aio_dummy_event;
+	//thread_pool_t sched_queue;
+	thread_queue_t sched_queue;
+} state;
 
 
-static void handle_event(event_t *event) {
+int epoll_ctler(int epfd, int op, int fd, uint32_t events, void *ptr)
+{
+	struct epoll_event ev;
+	ev.events = events;
+	ev.data.ptr = ptr;
+	return epoll_ctl(epfd, op, fd, &ev);
+}
+
+void make_runnable(thread_t *t)
+{
+	Q_INSERT_TAIL(&state.sched_queue, t, q_link);
+	//thread_pool_push(&state.sched_queue, t);
+}
+
+
+static void handle_event(event_t *event)
+{
 	thread_t *t = event->thread;
 	// If nobody gives a shit, just leave
 	if (!t) return;
@@ -41,23 +70,24 @@ static void handle_event(event_t *event) {
 	Q_INIT_HEAD(&t->pending_events);
 
 	// Schedule the thread we woke up
-	Q_INSERT_TAIL(&state.sched_queue, t, q_link);
-	//thread_pool_push(&state.sched_queue, t);
+	make_runnable(t);
 }
 
-static void handle_aio_event(struct io_event *event) {
+static void handle_aio_event(struct io_event *event)
+{
 	event_t *ev = event->data;
 	ev->complete = true;
 	handle_event(ev);
 }
-static void handle_epoll_event(struct epoll_event *event) {
+static void handle_epoll_event(struct epoll_event *event)
+{
 	event_t *ev = event->data.ptr;
 	handle_event(ev);
 }
 
 // Poll epoll and aio and handle any events. If can_sleep is true
 // and no aio events are expected, epoll will block.
-void do_poll(bool can_sleep)
+static void do_poll(bool can_sleep)
 {
 	struct io_event aio_events[MAX_EVENTS];
 	struct epoll_event epoll_events[MAX_EVENTS];
@@ -70,8 +100,7 @@ void do_poll(bool can_sleep)
 	// Poll for aio events. Don't block.
 	int aio_cnt = io_getevents(state.aio_ctx, 0, MAX_EVENTS,
 	                           aio_events, NULL);
-	errno = -aio_cnt; /* phbbt */
-	if (aio_cnt < 0) { fail(1, "io_getevents"); }
+	if (aio_cnt < 0) { fail2(1, -aio_cnt, "io_getevents"); }
 	state.expect_aio = aio_cnt == MAX_EVENTS;
 	for (int i = 0; i < aio_cnt; i++) {
 		handle_aio_event(&aio_events[i]);
@@ -95,13 +124,14 @@ void do_poll(bool can_sleep)
 	}
 }
 
-void run_thread(thread_t *thread)
+static void run_thread(thread_t *thread)
 {
-	// XXX: run thread
+	bool runnable = thread->cont(thread);
+	if (runnable) make_runnable(thread);
 }
 
 // A single threaded main loop
-void main_loop(void)
+static void main_loop(void)
 {
 	for (;;) {
 		thread_t *thread;
@@ -113,11 +143,32 @@ void main_loop(void)
 	}
 }
 
+static void setup_main_loop(void)
+{
+	int ret;
+	static event_t aio_dummy_event;
+	state.aio_dummy_event = &aio_dummy_event;
 
+	state.epoll_fd = epoll_create(1);
+	if (state.epoll_fd < 0) fail(1, "epoll_create");
+
+	ret = io_setup(MAX_AIO_EVENTS, &state.aio_ctx);
+	if (ret < 0) fail2(1, -ret, "io_setup");
+
+	state.aio_eventfd = eventfd(0, EFD_NONBLOCK);
+	if (state.aio_eventfd < 0) fail(1, "eventfd");
+
+	ret = epoll_ctler(state.epoll_fd, EPOLL_CTL_ADD, state.aio_eventfd,
+	                  EPOLLIN, state.aio_dummy_event);
+	if (ret < 0) fail(1, "epoll_ctl eventfd");
+}
 
 int main(int argc, char *argv[])
 {
 	process_name = argv[0];
+
+	setup_main_loop();
+	main_loop();
 
 	return 0;
 }
@@ -136,6 +187,20 @@ void fail(int status, char *fmt, ...)
 	va_end(ap);
 
 	fprintf(stderr, ": %s\n", strerror(errno));
+
+	exit(status);
+}
+void fail2(int status, int err, char *fmt, ...)
+{
+	va_list ap;
+	if (process_name)
+		fprintf(stderr, "%s: ", process_name);
+
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+
+	fprintf(stderr, ": %s\n", strerror(err));
 
 	exit(status);
 }

@@ -7,17 +7,10 @@
 Q_NEW_HEAD(event_queue_t, event_t);
 Q_NEW_HEAD(thread_queue_t, thread_t);
 
+typedef bool thread_cont(struct thread_t *thread);
 
-static struct {
-	bool expect_aio;
-	int epoll_fd;
-	io_context_t aio_ctx;
-	int aio_eventfd;
-	struct event_t *aio_dummy_event;
-	//thread_pool_t sched_queue;
-	thread_queue_t sched_queue;
-} state;
-
+int epoll_ctler(int epfd, int op, int fd, uint32_t events, void *ptr);
+void make_runnable(struct thread_t *t);
 
 typedef struct thread_t {
 	//work_item_t work_item;
@@ -25,8 +18,10 @@ typedef struct thread_t {
 	int tid;
 	event_queue_t pending_events;
 	struct event_t *finished_event;
+	thread_cont *cont;
 } thread_t;
 
+// XXX: track read/write event interest
 typedef struct event_t {
 	Q_NEW_LINK(event_t) q_link;
 	int id;
