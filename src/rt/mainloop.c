@@ -18,12 +18,9 @@
 #include "mainloop.h"
 //#include "thrpool.h"
 
-static char *process_name;
-void fail(int status, char *fmt, ...);
-void fail2(int status, int err, char *fmt, ...);
-
 #define MAX_EVENTS 10
 #define MAX_AIO_EVENTS 100 // dunno what this should be...
+#define MAX_ITERS 50
 
 static struct {
 	bool expect_aio;
@@ -35,13 +32,26 @@ static struct {
 	thread_queue_t sched_queue;
 } state;
 
+// XXX: we want something faster than this
+// and maybe want to recover from failure
+event_t *mk_event(void) {
+	event_t *e = calloc(1, sizeof(event_t));
+	if (!e) fail(1, "allocating thread");
+	return e;
+}
 
-int epoll_ctler(int epfd, int op, int fd, uint32_t events, void *ptr)
+void register_event(thread_t *thread, event_t *event)
+{
+	Q_INSERT_TAIL(&thread->pending_events, event, q_link);
+	event->thread = thread;
+}
+
+int epoll_ctler(int op, int fd, uint32_t events, void *ptr)
 {
 	struct epoll_event ev;
 	ev.events = events;
 	ev.data.ptr = ptr;
-	return epoll_ctl(epfd, op, fd, &ev);
+	return epoll_ctl(state.epoll_fd, op, fd, &ev);
 }
 
 void make_runnable(thread_t *t)
@@ -126,12 +136,18 @@ static void do_poll(bool can_sleep)
 
 static void run_thread(thread_t *thread)
 {
-	bool runnable = thread->cont(thread);
+	printf("running %d\n", thread->tid);
+	bool runnable = true;
+	// Run the thread until it has run for a while or has stopped being
+	// runnable.
+	for (int i = 0; runnable && i < MAX_ITERS; i++) {
+		runnable = thread->cont(thread);
+	}
 	if (runnable) make_runnable(thread);
 }
 
 // A single threaded main loop
-static void main_loop(void)
+void main_loop(void)
 {
 	for (;;) {
 		thread_t *thread;
@@ -143,7 +159,7 @@ static void main_loop(void)
 	}
 }
 
-static void setup_main_loop(void)
+void setup_main_loop(void)
 {
 	int ret;
 	static event_t aio_dummy_event;
@@ -158,19 +174,9 @@ static void setup_main_loop(void)
 	state.aio_eventfd = eventfd(0, EFD_NONBLOCK);
 	if (state.aio_eventfd < 0) fail(1, "eventfd");
 
-	ret = epoll_ctler(state.epoll_fd, EPOLL_CTL_ADD, state.aio_eventfd,
+	ret = epoll_ctler(EPOLL_CTL_ADD, state.aio_eventfd,
 	                  EPOLLIN, state.aio_dummy_event);
 	if (ret < 0) fail(1, "epoll_ctl eventfd");
-}
-
-int main(int argc, char *argv[])
-{
-	process_name = argv[0];
-
-	setup_main_loop();
-	main_loop();
-
-	return 0;
 }
 
 /* fail:  prints out the process name, and an error message,
