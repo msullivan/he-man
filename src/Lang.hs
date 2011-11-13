@@ -36,8 +36,9 @@ data Type = Int | Bool | String | FD | Buffer | Event -- | ThreadT
 data Stmt = Decl VDecl Expr
           | While Expr Block
           | If Expr Block Block
-          | Assign Var Expr
           | Spawn ThreadCode [Expr]
+          | Assign Expr Expr
+          | Exp Expr
           | Wait Expr
           | Exit
           deriving (Eq, Ord, Show)
