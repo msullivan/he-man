@@ -1,6 +1,6 @@
 .PHONY: clean
 
-docs.pdf: docs.tex CLib.lhs
+docs.pdf: docs.tex ../src/CLib.lhs
 	pdflatex $<
 
 clean:
