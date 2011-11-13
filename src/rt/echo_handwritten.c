@@ -158,11 +158,11 @@ bool setup(struct thread_t *thread)
 	make_socket_non_blocking(e->fd);
 
 	memset(&servaddr, 0, sizeof(servaddr));
-    servaddr.sin_family      = AF_INET;
-    servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port        = htons(port);
+	servaddr.sin_family      = AF_INET;
+	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+	servaddr.sin_port        = htons(port);
 	
-    if (bind(e->fd, (struct sockaddr *)&servaddr,
+	if (bind(e->fd, (struct sockaddr *)&servaddr,
 	         sizeof(servaddr)) < 0)
 		fail(1, "bind");
 
@@ -170,7 +170,7 @@ bool setup(struct thread_t *thread)
 
 	e->event = mk_event();
 	e->event->id = e->fd;
-	
+
 	if (epoll_ctler(EPOLL_CTL_ADD, e->fd, EPOLLIN|EPOLLET, e->event) < 0)
 		fail(1, "epoll_ctl");
 
