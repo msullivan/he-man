@@ -26,13 +26,42 @@ child_code = Thread [(Int,fd)] $ do
 
 -}
 
-type Prgm = [Stmt]
+type Block = [Stmt]
 type Var = String
-data Type = Int | Bool | ThreadT | FD | Buffer | Event
-data Stmt = Decl Type Var Expr 
-          | While Expr [Stmt]
-          | If Expr [Stmt] [Stmt] [Stmt]
+type VDecl = (Var, Type)
+type ThreadCode = ([VDecl], Block)
+
+data Type = Int | Bool | String | FD | Buffer | Event -- | ThreadT
+          deriving (Eq, Ord, Show)
+data Stmt = Decl VDecl Expr
+          | While Expr Block
+          | If Expr Block Block
           | Assign Var Expr
-data Expr = Call Prim 
-          | Thread [Stmt]
-data Prim = Unit
+          | Wait Expr
+          | Exit
+          deriving (Eq, Ord, Show)
+data Expr = Call Prim [Expr]
+          | Thread ThreadCode [Expr]
+          | Arith ArithOp Expr Expr
+          | ArithUnop ArithUnop Expr
+          | NumLit Integer
+          | StringLit String
+          deriving (Eq, Ord, Show)
+data ArithOp = Plus | Times | Minus | Div | Mod
+             | And | Or | Xor
+             | Rsh | Lsh
+             deriving (Eq, Ord, Show)
+data ArithUnop = Negate | Not
+               deriving (Eq, Ord, Show)
+data Prim = CFn String
+          deriving (Eq, Ord, Show)
+
+
+instance Num Expr where
+  fromInteger = NumLit
+  (+) = Arith Plus
+  (-) = Arith Minus
+  (*) = Arith Times
+  negate = ArithUnop Negate
+  abs = error "full of lies"
+  signum = error "full of lies"
