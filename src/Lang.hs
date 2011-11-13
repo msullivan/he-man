@@ -46,6 +46,7 @@ data Expr = Call Prim [Expr]
           | ArithUnop ArithUnop Expr
           | NumLit Integer
           | StringLit String
+          | Var Var
           deriving (Eq, Ord, Show)
 data ArithOp = Plus | Times | Minus | Div | Mod
              | And | Or | Xor
