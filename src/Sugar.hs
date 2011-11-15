@@ -34,8 +34,8 @@ wait = add . Wait
 call :: Prim -> Type -> [Expr] -> Prog Expr
 call fn t args = var "tmp" t (Call fn args)
 
-new_thread :: ThreadCode -> [Expr] -> Prog Expr
-new_thread thread args = var "tmp" Int (Thread thread args) -- XXX type
+spawn :: ThreadCode -> [Expr] -> Prog ()
+spawn thread args = add $ Spawn thread args
 
 while :: Expr -> Prog a -> Prog ()
 while e body = do
