@@ -70,21 +70,28 @@ flattenStmt stmt bStmts aStmts tail =
     Lang.Exp expr -> continue $ Exp expr
     Lang.Assign expr expr' -> continue $ Assign expr expr'
     Lang.If expr cs as -> 
-      (bs,If expr (Goto "c") (Goto "a"),([sbb,cbb,abb] ++ bbbs ++ cbbs ++ abbs))
-        where sbb  = makeBlock "ifseq" [] aStmts tail
+      (bs,If expr (Goto "c") (Goto "a"),[sbb,cbb,abb] ++ bbbs ++ cbbs ++ abbs)
+        where sbb = makeBlock "ifseq" [] aStmts tail
               (bs,bbt,bbbs) = flattenStmts bStmts [] tail -- FIXME what about bbt?
               (cs',cbt,cbbs) = flattenStmts cs [] (Goto "ifseq")
               (as',abt,abbs) = flattenStmts as [] (Goto "ifseq")
               cbb = makeBlock "c" [] cs' cbt
               abb = makeBlock "a" [] as' abt
-    --Lang.Exit -> makeBlock "foo" [] aStmts 
+    Lang.While expr ss -> (bs,wseq,[sbb,wbb] ++ bbbs ++ wbbs)
+      where sbb = makeBlock "whileseq" [] aStmts tail
+            wseq = If expr (Goto "w") (Goto "whileseq")
+            (bs,bbt,bbbs) = flattenStmts bStmts [] wseq
+            (ws,wbt,wbbs) = flattenStmts ss [] wseq
+            wbb = makeBlock "w" [] ws wbt
+    --Lang.Exit -> makeBlock "foo" [] aStmts
+    {-Lang.Wait expr -> (bs,GotoWait ,)
+      where sbb = makeBlock "waitseq" [] aStmts tail-}
     --Lang.Spawn (vds,ss) args -> continue $ [spawnThread "blah" args],
-    --Lang.While expr stmts -> 
   where continue s = flattenStmts bStmts (s:aStmts) tail
 
 -- TESTS
 
-test1 = flattenPrgm [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
+test = flattenPrgm [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
 
 {-
 [("main",[],[Exp (NumLit 5)],If (NumLit 6) (Goto "c") (Goto "a")),
@@ -92,9 +99,22 @@ test1 = flattenPrgm [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
  ("c",[],[Exp (Call (CFn "cfun") [])],Goto "ifseq"),
  ("a",[],[Exp (Call (CFn "afun") [])],Goto "ifseq")]
 -}
-test2 = flattenPrgm [Lang.Exp (Lang.NumLit 5),
-                     Lang.If (Lang.NumLit 6)
-                             [Lang.Exp $ Lang.Call (Lang.CFn "cfun") []]
-                             [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
-                     Lang.Exp (Lang.NumLit 10)]
+testIf = flattenPrgm [Lang.Exp (Lang.NumLit 5),
+                      Lang.If (Lang.NumLit 6)
+                              [Lang.Exp $ Lang.Call (Lang.CFn "cfun") []]
+                              [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
+                      Lang.Exp (Lang.NumLit 10)]
+
+{-
+[("main",[],[Exp (NumLit 5)],If (NumLit 6) (Goto "w") (Goto "whileseq")),
+ ("whileseq",[],[Exp (NumLit 10)],Exit),
+ ("w",[],[Exp (Call (CFn "rep") []),Exp (Call (CFn "rep2") [])],If (NumLit 6) (Goto "w") (Goto
+  "whileseq"))]
+-}
+testWhile = flattenPrgm [Lang.Exp (Lang.NumLit 5),
+                         Lang.While (Lang.NumLit 6)
+                                    [Lang.Exp $ Lang.Call (Lang.CFn "rep") [],
+                                     Lang.Exp $ Lang.Call (Lang.CFn "rep2") []],
+                         Lang.Exp (Lang.NumLit 10)]
+
 
