@@ -1,10 +1,9 @@
 module Sugar where
 
 import Lang
-import Control.Monad.State
-import Control.Monad.Writer
+import Control.Monad.RWS
 
-type Prog = StateT Int (Writer [Stmt])
+type Prog = RWS () [Stmt] Int
 
 freshName :: Prog Int
 freshName = do
