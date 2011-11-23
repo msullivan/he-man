@@ -1,31 +1,5 @@
 module Lang where
 
-{-
-Echo server:
-
-setup -> accept/spawn ->
-  thread_setup ->
-  read -> write | die
-  write -> write | read | die
-
-main = do
-  fd <- var FD "fd" (setup_listener port)
-  e <- var Event "e" (reg_event fd READ)
-  while true { do
-    fd' <- call accept fd
-    spawn child_code fd'
-  }
-
-child_code = Thread [(Int,fd)] $ do
-  e <- var Event "e" (setup_connection fd)
-  buf <- var Buffer "buf" (new_buf 4096)
-  while true { do
-    amount_read <- read e buf 4096
-    write e buf amount_read
-  }
-
--}
-
 type Block = [Stmt]
 type Var = String
 type VDecl = (Var, Type)
@@ -45,6 +19,8 @@ data Stmt = Decl VDecl Expr
 data Expr = Call Prim [Expr]
           | Arith ArithOp Expr Expr
           | ArithUnop ArithUnop Expr
+          | RelnOp RelnOp Expr Expr
+          | Constant String
           | NumLit Integer
           | StringLit String
           | Var Var
@@ -55,6 +31,8 @@ data ArithOp = Plus | Times | Minus | Div | Mod
              deriving (Eq, Ord, Show)
 data ArithUnop = Negate | Not
                deriving (Eq, Ord, Show)
+data RelnOp = Eq | Less | Greater -- more
+             deriving (Eq, Ord, Show)
 data Prim = CFn String
           deriving (Eq, Ord, Show)
 
