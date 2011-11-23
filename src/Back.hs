@@ -2,7 +2,6 @@ module Back where
 
 import qualified Lang
 import Control.Monad.Writer
-import Debug.Trace
 
 type Prgm = [Block]
 
@@ -21,24 +20,13 @@ data Tail = If Lang.Expr Tail Tail
           | Exit
           deriving (Eq, Ord, Show)
 
-{-
-data Stmt = Decl VDecl Expr
-          | Assign Expr Expr
-          | While Expr [Stmt]
-          | If Expr [Stmt] [Stmt]
-          | Spawn ThreadCode [Expr]
-          | Exp Expr
-          | Wait Expr
-          | Exit
-          deriving (Eq, Ord, Show)
--}
-
 -- Helpers
 
 makeBlock name decls stmts tail = (name,decls,stmts,tail)
---spawnThread name args = [Exp $ Call (CFn "spawn") (Lang.Var name):args
+spawnThread name args = [Exp $ Lang.Call (Lang.CFn "spawn") args']
+  where args' = (Lang.Var name):args
 
--- Grammar
+--{{{ Flatten pass
 
 {-
 flattenPrgm prgm = 
@@ -51,17 +39,16 @@ flattenPrgm stmts = (makeBlock "main" [] s t):bbs
   where (s,t,bbs) = flattenStmts stmts [] Exit
 
 {- flattenStmts takes a list of Stmts, a list of succeeding Stmts, and the Tail
-for that block, and returns 
--}
+for that block, and returns a new list of Stmts, a new Tail, and a list of new
+blocks. -}
 
 flattenStmts :: [Lang.Stmt] -> [Stmt] -> Tail -> ([Stmt],Tail,[Block])
 flattenStmts [] aStmts tail = (aStmts,tail,[])
 flattenStmts stmts aStmts tail = flattenStmt (last stmts) (init stmts) aStmts tail
 
-{- flattenStmt takes a Statement, a list of preceding Statements, a list of
-succeeding Statements, and a Tail, and returns a new list of Statements, a new
-Tail, and a list of new blocks.
--}
+{- flattenStmt takes a Stmt, a list of preceding Stmt, a list of succeeding
+Stmt, and a Tail, and returns a new list of Stmt, a new Tail, and a list of new
+blocks. -}
 
 flattenStmt :: Lang.Stmt -> [Lang.Stmt] -> [Stmt] -> Tail -> ([Stmt],Tail,[Block])
 flattenStmt stmt bStmts aStmts tail =
@@ -71,27 +58,45 @@ flattenStmt stmt bStmts aStmts tail =
     Lang.Assign expr expr' -> continue $ Assign expr expr'
     Lang.If expr cs as -> 
       (bs,If expr (Goto "c") (Goto "a"),[sbb,cbb,abb] ++ bbbs ++ cbbs ++ abbs)
-        where sbb = makeBlock "ifseq" [] aStmts tail
-              (bs,bbt,bbbs) = flattenStmts bStmts [] tail -- FIXME what about bbt?
-              (cs',cbt,cbbs) = flattenStmts cs [] (Goto "ifseq")
-              (as',abt,abbs) = flattenStmts as [] (Goto "ifseq")
-              cbb = makeBlock "c" [] cs' cbt
-              abb = makeBlock "a" [] as' abt
+      where sbb = makeBlock "ifseq" [] aStmts tail
+            (bs,bbt,bbbs) = flattenStmts bStmts [] tail
+            (cs',cbt,cbbs) = flattenStmts cs [] (Goto "ifseq")
+            (as',abt,abbs) = flattenStmts as [] (Goto "ifseq")
+            cbb = makeBlock "c" [] cs' cbt
+            abb = makeBlock "a" [] as' abt
     Lang.While expr ss -> (bs,wseq,[sbb,wbb] ++ bbbs ++ wbbs)
       where sbb = makeBlock "whileseq" [] aStmts tail
             wseq = If expr (Goto "w") (Goto "whileseq")
             (bs,bbt,bbbs) = flattenStmts bStmts [] wseq
             (ws,wbt,wbbs) = flattenStmts ss [] wseq
             wbb = makeBlock "w" [] ws wbt
-    --Lang.Exit -> makeBlock "foo" [] aStmts
-    {-Lang.Wait expr -> (bs,GotoWait ,)
-      where sbb = makeBlock "waitseq" [] aStmts tail-}
-    --Lang.Spawn (vds,ss) args -> continue $ [spawnThread "blah" args],
+    Lang.Exit -> (bs,Exit,bbbs)
+      where (bs,bbt,bbbs) = flattenStmts bStmts [] Exit
+    Lang.Wait expr -> (bs,wseq,sbb:bbbs)
+      where sbb = makeBlock "waitseq" [] aStmts tail
+            wseq = GotoWait "waitseq"
+            (bs,bbt,bbbs) = flattenStmts (bStmts ++ [Lang.Exp expr]) [] wseq
+    {-
+    Lang.Spawn (vs,ss) args -> (bs,sseq,bbbs)
+      where 
+            spawn = spawnThread "newthread" args
+            (bs,bbt,bbbs) = flattenStmts bStmts (spawn ++ aStmts) tail
+            (bs,bbt,bbbs) = flattenStmts (ss) [] Exit
+            tbb = makeBlock "newthread" vs bs Exit
+    -}
   where continue s = flattenStmts bStmts (s:aStmts) tail
 
--- TESTS
+{-
+bs,spawn(ss),as
+==>
+continue: bs,spawnseq(threadname),as
+threadname: ss
+-}
 
-test = flattenPrgm [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
+--}}}
+--{{{ Tests
+
+testFlat = flattenPrgm [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
 
 {-
 [("main",[],[Exp (NumLit 5)],If (NumLit 6) (Goto "c") (Goto "a")),
@@ -117,4 +122,41 @@ testWhile = flattenPrgm [Lang.Exp (Lang.NumLit 5),
                                      Lang.Exp $ Lang.Call (Lang.CFn "rep2") []],
                          Lang.Exp (Lang.NumLit 10)]
 
+{-
+[("main",[],[Exp (NumLit 5)],Exit)]
+-}
+testExit = flattenPrgm [Lang.Exp (Lang.NumLit 5),
+                        Lang.Exit,
+                        Lang.Exp (Lang.NumLit 6)]
 
+{-
+[("main",[],[Exp (NumLit 5)],If (NumLit 6) (Goto "c") (Goto "a")),
+ ("ifseq",[],[Exp (NumLit 10)],Exit),
+ ("c",[],[],Exit),
+ ("a",[],[Exp (Call (CFn "afun") [])],Goto "ifseq")]
+-}
+testIfExit = flattenPrgm [Lang.Exp (Lang.NumLit 5),
+                          Lang.If (Lang.NumLit 6)
+                                  [Lang.Exit]
+                                  [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
+                          Lang.Exp (Lang.NumLit 10)]
+
+{-
+[("main",[],[Exp (NumLit 10),Exp (Call (CFn "wfun") [])],GotoWait "waitseq"),
+ ("waitseq",[],[Exp (NumLit 11)],Exit)]
+-}
+testWait = flattenPrgm [Lang.Exp (Lang.NumLit 10),
+                        Lang.Wait (Lang.Call (Lang.CFn "wfun") []),
+                        Lang.Exp (Lang.NumLit 11)]
+
+{-
+
+-}
+testSpawn = flattenPrgm [Lang.Exp (Lang.NumLit 5),
+                         Lang.Spawn ([("x",Lang.Int),("y",Lang.Bool)],
+                           [Lang.Exp (Lang.NumLit 10),
+                            Lang.Exp (Lang.NumLit 15)])
+                           [Lang.Var "arg1",Lang.Var "arg2"],
+                         Lang.Exp (Lang.NumLit 20)]
+
+--}}}
