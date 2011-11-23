@@ -6,6 +6,10 @@ import Data.Functor.Identity
 
 type Prog = RWS () [Stmt] Int
 
+compile :: Prog () -> Block
+compile prog = block
+  where (_, block) = execRWS prog () 0
+
 freshName :: Prog Int
 freshName = do
   n <- get
@@ -21,10 +25,17 @@ var name t e = do
   let name' = name ++ "_" ++ show v
   add $ Decl (name', t) e
   return $ Var name'
-  
+
+infixl 0 .=
+infixl 0 .=.
 (.=) :: Expr -> Expr -> Prog ()
 l .= r = do
   add $ Assign l r
+
+(.=.) :: Expr -> Prog Expr -> Prog ()
+l .=. r = do
+  r' <- r
+  l .= r'
 
 exit :: Prog ()
 exit = add Exit
@@ -68,4 +79,13 @@ sock_listen fd q_limit =
   call (CFn "listen") Int [fd, q_limit]
 sock_accept fd =
   call (CFn "accept") Int [fd]
+sock_read fd buf len =
+  call (CFn "read") Int [fd, buf, len]
+sock_write fd buf len =
+  call (CFn "write") Int [fd, buf, len]
+
+new_buf size =
+  call (CFn "new_buf") Buffer [size]
+
+
 -- TODO: a bunch more
