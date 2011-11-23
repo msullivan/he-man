@@ -1,10 +1,10 @@
 module Sugar where
 
 import Lang
-import Control.Monad.State
-import Control.Monad.Writer
+import Control.Monad.RWS
+import Data.Functor.Identity
 
-type Prog = StateT Int (Writer [Stmt])
+type Prog = RWS () [Stmt] Int
 
 freshName :: Prog Int
 freshName = do
@@ -23,7 +23,8 @@ var name t e = do
   return $ Var name'
   
 (.=) :: Expr -> Expr -> Prog ()
-l .= r = add $ Assign l r
+l .= r = do
+  add $ Assign l r
 
 exit :: Prog ()
 exit = add Exit
@@ -51,12 +52,20 @@ ifE e thenBody elseBody = do
 ifE' :: Expr -> Prog a -> Prog ()
 ifE' e thenBody = ifE e thenBody (return ())
 
+(.<) = RelnOp Less
+(.>) = RelnOp Greater
+(.==) = RelnOp Eq
+
 -- Sugar for individual functions and whatnot
 socket domain typ protcol =
   call (CFn "socket") Int [domain, typ, protcol]
 make_nb fd = call (CFn "make_non_blocking") Int [fd]
-bind fd family addr port =
-  call (CFn "socket") Int [fd, family, addr, port]
+sock_bind fd family addr port =
+  call (CFn "bind") Int [fd, family, addr, port]
 reg_event fd modes =
   call (CFn "reg_event") Int [fd, modes]
+sock_listen fd q_limit =
+  call (CFn "listen") Int [fd, q_limit]
+sock_accept fd =
+  call (CFn "accept") Int [fd]
 -- TODO: a bunch more
