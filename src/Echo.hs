@@ -69,12 +69,8 @@ setup_connection fd = do
   e <- var "event" Event =<< (reg_event fd kEVENT_RDWR)
   return e
 
--- This is kind of lame
-child_args = [("child_fd", Int)]
-child_fd = Var "child_fd"
-child_code = (child_args, compile child_body)
-
-child_body = do
+child_code = declare_thread [("child_fd", Int)] $
+  \[child_fd] -> do
   e <- (setup_connection child_fd)
   buf <- var "buf" Buffer =<< (new_buf bufsize)
   while 1 $ do

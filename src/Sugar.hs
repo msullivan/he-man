@@ -10,15 +10,18 @@ compile :: Prog () -> Block
 compile prog = block
   where (_, block) = execRWS prog () 0
 
+-- Generate a fresh integer for use in naming things
 freshName :: Prog Int
 freshName = do
   n <- get
   put (n+1)
   return n
   
+-- Add a statement to the current block
 add :: Stmt -> Prog ()
 add s = tell [s]
 
+--- Wrappers around all of the important language features
 var :: String -> Type -> Expr -> Prog Expr
 var name t e = do
   v <- freshName
@@ -66,6 +69,11 @@ ifE' e thenBody = ifE e thenBody (return ())
 (.<) = RelnOp Less
 (.>) = RelnOp Greater
 (.==) = RelnOp Eq
+
+-- Helper to construct a ThreadCode - kind of annoying
+declare_thread :: [VDecl] -> ([Expr] -> Prog ()) -> ThreadCode
+declare_thread decls f = (decls, compile prog)
+  where prog = f (map (Var . fst) decls)
 
 -- Sugar for individual functions and whatnot
 socket domain typ protcol =
