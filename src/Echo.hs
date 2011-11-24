@@ -28,41 +28,68 @@ child_code = Thread [(Int,fd)] $ do
 
 import Lang
 import Sugar
-import Control.Applicative
 
+------------------------------ Library code
 kAF_INET = Constant "AF_INET"
 kINADDR_ANY = Constant "INADDR_ANY"
 kSOCK_STREAM = Constant "SOCK_STREAM"
 kEVENT_RD = Constant "EVENT_RD"
+kEVENT_WR = Constant "EVENT_WR"
+kEVENT_RDWR = Constant "EVENT_RDWR"
 
+
+do_nb_action :: Expr -> Prog Expr -> Prog Expr
+do_nb_action e action = do
+  res <- action
+  ifE' (res .< 0) $ do
+    while (res .< 0) $ do
+      wait e
+      res .=. action
+  return res
+
+accept fd e = do_nb_action e (sock_accept fd)
+do_read fd e buf size = do_nb_action e (sock_read fd buf size)
+do_write fd e buf size = do_nb_action e (sock_write fd buf size)
+
+-- TODO: error checking
+full_write fd e buf size = do
+  amt_written <- var "amt_written" Int 0
+  while (amt_written .< size) $ do
+    amt <- do_write fd e (buf + amt_written) (size - amt_written)
+    amt_written .= amt_written + amt
+
+------------------------------ The application
 q_limit = 1024
 port = 2023
 bufsize = 4096
 
-accept fd e = do
-  fd' <- sock_accept fd
-  ifE' (fd' .< 0) $ do
-    while (fd' .< 0) $ do
-      wait e
-      fd'' <- sock_accept fd
-      fd' .= fd''
-  return fd'
+setup_connection :: Expr -> Prog Expr
+setup_connection fd = do
+  make_nb fd
+  e <- var "event" Event =<< (reg_event fd kEVENT_RDWR)
+  return e
 
+child_code = declare_thread [("child_fd", Int)] $
+  \[child_fd] -> do
+  e <- (setup_connection child_fd)
+  buf <- var "buf" Buffer =<< (new_buf bufsize)
+  while 1 $ do
+    amount_read <- do_read child_fd e buf bufsize
+    ifE' (amount_read .== 0) exit
+    full_write child_fd e buf amount_read
 
-setup_listener :: Expr -> Prog Expr
+setup_listener :: Expr -> Prog (Expr, Expr)
 setup_listener port = do
   fd <- var "fd" Int =<< (socket kAF_INET kSOCK_STREAM 0)
   make_nb fd
   sock_bind fd kAF_INET kINADDR_ANY port
   sock_listen fd q_limit
-  return fd
+  e <- var "event" Event =<< (reg_event fd kEVENT_RD)
+  return (fd, e)
 
 main_loop = do
-  fd <- setup_listener port
-  e <- var "event" Event =<< (reg_event fd kEVENT_RD)
+  (fd, e) <- setup_listener port
   while 1 $ do
     fd' <- accept fd e
     spawn child_code [fd']
-
-
-child_code = undefined
+main_loop_code = compile main_loop
