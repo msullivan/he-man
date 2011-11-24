@@ -2,6 +2,8 @@ module Back where
 
 import qualified Lang
 import Control.Monad.Writer
+import Debug.Trace
+import Data.Maybe
 
 type Prgm = [Block]
 
@@ -20,13 +22,12 @@ data Tail = If Lang.Expr Tail Tail
           | Exit
           deriving (Eq, Ord, Show)
 
--- Helpers
+--{{{ flattenPrgm
 
 makeBlock name decls stmts tail = (name,decls,stmts,tail)
 spawnThread name args = [Exp $ Lang.Call (Lang.CFn "spawn") args']
   where args' = (Lang.Var name):args
-
---{{{ Flatten pass
+mainBlock = "main"
 
 {-
 flattenPrgm prgm = 
@@ -35,7 +36,7 @@ flattenPrgm prgm =
   mainBlock:blocks
 -}
 
-flattenPrgm stmts = (makeBlock "main" [] s t):bbs
+flattenPrgm stmts = [makeBlock mainBlock [] s t] ++ bbs
   where (s,t,bbs) = flattenStmts stmts [] Exit
 
 {- flattenStmts takes a list of Stmts, a list of succeeding Stmts, and the Tail
@@ -76,22 +77,51 @@ flattenStmt stmt bStmts aStmts tail =
       where sbb = makeBlock "waitseq" [] aStmts tail
             wseq = GotoWait "waitseq"
             (bs,bbt,bbbs) = flattenStmts (bStmts ++ [Lang.Exp expr]) [] wseq
-    {-
-    Lang.Spawn (vs,ss) args -> (bs,sseq,bbbs)
-      where 
-            spawn = spawnThread "newthread" args
+    Lang.Spawn (vs,ss) args -> (bs,Exit,[tbb] ++ tbbs ++ bbbs)
+      where spawn = spawnThread "newthread" args
             (bs,bbt,bbbs) = flattenStmts bStmts (spawn ++ aStmts) tail
-            (bs,bbt,bbbs) = flattenStmts (ss) [] Exit
-            tbb = makeBlock "newthread" vs bs Exit
-    -}
+            (ts,tbt,tbbs) = flattenStmts (ss) [] Exit
+            tbb = makeBlock "newthread" vs ts Exit
   where continue s = flattenStmts bStmts (s:aStmts) tail
 
-{-
-bs,spawn(ss),as
-==>
-continue: bs,spawnseq(threadname),as
-threadname: ss
--}
+--}}}
+--{{{ optimizeJumps
+
+{- optimizeJumps removes unnecessary Gotos from the output of flattenPrgm. -}
+
+-- TODO combine small non-empty blocks
+-- TODO remove unneeded blocks which appear in If tails
+
+optimizeJumps :: Prgm -> Prgm
+optimizeJumps bs = traceShow xs $ map (fMapTail (flip walk xs)) bs'
+  where
+  (bs',xs) = optimize [] bs
+  optimize xs [] = ([],xs)
+  optimize xs (b:bs) = case b of
+    (x,vs,[],Goto x') ->
+      if Goto x `elem` map snd xs
+        then optimize ((Goto x,walk (Goto x') xs):xs) bs
+        else let (bs',xs') = optimize xs bs in ((x,vs,[],walk (Goto x') xs):bs',xs')
+    (x,vs,[],Exit) -> optimize ((Goto x,Exit):xs) bs
+    (x,vs,[],If e (Goto x') (Goto x'')) ->
+      let xs' = (Goto x,If e (walk (Goto x') xs) (walk (Goto x'') xs)):xs in
+      if Goto x `elem` map snd xs'
+        then optimize xs' bs
+        else let (bs',xs'') = optimize xs' bs in
+             ((x,vs,[],If e (walk (Goto x') xs) (walk (Goto x'') xs)):bs',xs'')
+    _ -> let (bs',xs') = optimize xs bs in (b:bs',xs')
+
+
+walk x xs = case lookup x xs of
+  Just x' -> walk x' xs
+  Nothing -> x
+
+fMapTail f (x,vs,ss,tail) = (x,vs,ss,help tail) where
+  help tail = case tail of
+    Goto x -> f (Goto x)
+    GotoWait x -> GotoWait x
+    If e t t' -> f (If e (help t) (help t'))
+    Exit -> Exit
 
 --}}}
 --{{{ Tests
@@ -150,7 +180,10 @@ testWait = flattenPrgm [Lang.Exp (Lang.NumLit 10),
                         Lang.Exp (Lang.NumLit 11)]
 
 {-
-
+[("main",[],[Exp (NumLit 5),
+             Exp (Call (CFn "spawn") [Var "newthread",Var "arg1",Var "arg2"]),
+             Exp (NumLit 20)],Exit),
+ ("newthread",[("x",Int),("y",Bool)],[Exp (NumLit 10),Exp (NumLit 15)],Exit)]
 -}
 testSpawn = flattenPrgm [Lang.Exp (Lang.NumLit 5),
                          Lang.Spawn ([("x",Lang.Int),("y",Lang.Bool)],
@@ -158,5 +191,39 @@ testSpawn = flattenPrgm [Lang.Exp (Lang.NumLit 5),
                             Lang.Exp (Lang.NumLit 15)])
                            [Lang.Var "arg1",Lang.Var "arg2"],
                          Lang.Exp (Lang.NumLit 20)]
+
+{-
+[("main",[],[],If (NumLit 6) (Goto "c") (Goto "a")),
+ ("ifseq",[],[],Exit),
+ ("c",[],[],Exit),
+ ("a",[],[],If (NumLit 7) (Goto "c") (Goto "a")),
+ ("ifseq",[],[],Goto "ifseq"),
+ ("c",[],[],Exit),
+ ("a",[],[],Exit)]
+-}
+
+testOptimize = optimizeJumps $
+  flattenPrgm[Lang.If (Lang.NumLit 6)
+                      [Lang.Exit]
+                      [Lang.If (Lang.NumLit 7)
+                               [Lang.Exp (Lang.NumLit 8)]
+                               [Lang.Exp (Lang.NumLit 9)]],
+              Lang.Exp (Lang.NumLit 10)]
+
+{-
+[("main",[],[],If (NumLit 6) Exit (If (NumLit 7) (Goto "c2") (Goto "a2"))),
+ ("a1",[],[],If (NumLit 7) (Goto "c2") (Goto "a2")),
+ ("ifseq2",[],[Exp (NumLit 10)],Exit),
+ ("c2",[],[Exp (NumLit 8)],Goto "ifseq2"),
+ ("a2",[],[Exp (NumLit 9)],Goto "ifseq2")]
+-}
+
+testOptimize' = optimizeJumps $
+  [("main",[],[],If (Lang.NumLit 6) (Goto "c1") (Goto "a1")),
+   ("c1",[],[],Exit),
+   ("a1",[],[],If (Lang.NumLit 7) (Goto "c2") (Goto "a2")),
+   ("ifseq2",[],[Exp (Lang.NumLit 10)],Exit),
+   ("c2",[],[Exp (Lang.NumLit 8)],Goto "ifseq2"),
+   ("a2",[],[Exp (Lang.NumLit 9)],Goto "ifseq2")]
 
 --}}}
