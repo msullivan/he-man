@@ -5,7 +5,6 @@ import Control.Monad.Writer
 import Control.Monad.State
 import Debug.Trace
 import Data.Maybe
-import Data.Functor.Identity
 
 type Flattener = State Label
 
@@ -120,28 +119,28 @@ flattenStmt stmt bStmts aStmts tail =
 
 {- optimizeJumps removes unnecessary Gotos from the output of flattenPrgm. -}
 
--- TODO combine small non-empty blocks
--- TODO remove unneeded blocks which appear in If tails
+-- TODO fuse small non-empty blocks
+-- TODO eliminate blocks never jumped to (optimized If tail)
 
-optimizeJumps :: Prgm -> Prgm
-optimizeJumps bs = traceShow xs $ map (fMapTail (flip walk xs)) bs'
-  where
-  (bs',xs) = optimize [] bs
-  optimize xs [] = ([],xs)
-  optimize xs (b:bs) = case b of
-    (x,vs,[],Goto x') ->
-      if Goto x `elem` map snd xs
-        then optimize ((Goto x,walk (Goto x') xs):xs) bs
-        else let (bs',xs') = optimize xs bs in ((x,vs,[],walk (Goto x') xs):bs',xs')
-    (x,vs,[],Exit) -> optimize ((Goto x,Exit):xs) bs
-    (x,vs,[],If e (Goto x') (Goto x'')) ->
-      let xs' = (Goto x,If e (walk (Goto x') xs) (walk (Goto x'') xs)):xs in
-      if Goto x `elem` map snd xs'
-        then optimize xs' bs
-        else let (bs',xs'') = optimize xs' bs in
-             ((x,vs,[],If e (walk (Goto x') xs) (walk (Goto x'') xs)):bs',xs'')
-    _ -> let (bs',xs') = optimize xs bs in (b:bs',xs')
+optimizeJumps bs = map (fMapTail (flip walk xs)) bs'
+  where (bs',xs) = optimize bs []
 
+optimize [] xs = ([],xs)
+optimize (b:bs) ls =
+  let targets = map snd ls in
+  case b of
+  (label,vs,[],_) | Goto label `elem` targets ->
+    let (bs',ls') = optimize bs ls in (b:bs',ls')
+  (label,vs,[],Goto g) ->
+    let (bs',ls') = optimize bs ((Goto label,walk (Goto g) ls):ls) in (bs',ls')
+  (label,vs,[],Exit) ->
+    optimize bs ((Goto label,Exit):ls)
+  (label,vs,[],If e (Goto g) (Goto g')) ->
+    let tail = walk (Goto g) ls
+        tail' = walk (Goto g') ls
+        (bs',ls') = optimize bs ((Goto label,If e tail tail'):ls) in
+    ((label,vs,[],If e tail tail'):bs',ls')
+  _ -> let (bs',ls') = optimize bs ls in (b:bs',ls')
 
 walk x xs = case lookup x xs of
   Just x' -> walk x' xs
@@ -192,12 +191,11 @@ testSpawn = flattenPrgm [Lang.Exp (Lang.NumLit 5),
                            [Lang.Var "arg1",Lang.Var "arg2"],
                          Lang.Exp (Lang.NumLit 20)]
 
-testOptimize = optimizeJumps $
-  flattenPrgm[Lang.If (Lang.NumLit 6)
-                      [Lang.Exit]
-                      [Lang.If (Lang.NumLit 7)
-                               [Lang.Exp (Lang.NumLit 8)]
-                               [Lang.Exp (Lang.NumLit 9)]],
-              Lang.Exp (Lang.NumLit 10)]
+testOptimize = flattenPrgm [Lang.If (Lang.NumLit 6)
+                                    [Lang.Exit]
+                                    [Lang.If (Lang.NumLit 7)
+                                             [Lang.Exp (Lang.NumLit 8)]
+                                             [Lang.Exp (Lang.NumLit 9)]],
+                            Lang.Exp (Lang.NumLit 10)]
 
 --}}}
