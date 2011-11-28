@@ -34,8 +34,12 @@ flattenPrgm stmts = [makeBlock 0 [] s t] ++ bbs where
   
 makeBlock name decls stmts tail = (name,decls,stmts,tail)
 
+-- TODO
 spawnThread name args = [Exp $ Lang.Call (Lang.CFn "spawn") args']
   where args' = (Lang.NumLit $ fromIntegral name):args
+
+-- TODO
+registerEvent event = [Lang.Exp $ Lang.Call (Lang.CFn "register") [event]]
 
 fresh = do
   x <- get
@@ -100,7 +104,7 @@ flattenStmt stmt bStmts aStmts tail =
       do seqL <- fresh
          let seqB = makeBlock seqL [] aStmts tail
              waitT = GotoWait seqL 
-         (bs,_,bBs) <- flattenStmts (bStmts ++ [Lang.Exp expr]) [] waitT
+         (bs,_,bBs) <- flattenStmts (bStmts ++ (registerEvent expr)) [] waitT
          return (bs,waitT,seqB:bBs)
     Lang.Spawn (vs,ss) args ->
       do threadL <- fresh
