@@ -4,6 +4,9 @@ import qualified Lang
 import Control.Monad.Writer
 import Debug.Trace
 import Data.Maybe
+import Data.Functor.Identity
+
+type Flattener = Identity
 
 type Prgm = [Block]
 
@@ -37,51 +40,61 @@ flattenPrgm prgm =
 -}
 
 flattenPrgm stmts = [makeBlock mainBlock [] s t] ++ bbs
-  where (s,t,bbs) = flattenStmts stmts [] Exit
+  where (s,t,bbs) = runIdentity $ flattenStmts stmts [] Exit
 
 {- flattenStmts takes a list of Stmts, a list of succeeding Stmts, and the Tail
 for that block, and returns a new list of Stmts, a new Tail, and a list of new
 blocks. -}
 
-flattenStmts :: [Lang.Stmt] -> [Stmt] -> Tail -> ([Stmt],Tail,[Block])
-flattenStmts [] aStmts tail = (aStmts,tail,[])
-flattenStmts stmts aStmts tail = flattenStmt (last stmts) (init stmts) aStmts tail
+flattenStmts :: [Lang.Stmt] -> [Stmt] -> Tail ->
+                Flattener ([Stmt],Tail,[Block])
+flattenStmts [] aStmts tail = return (aStmts,tail,[])
+flattenStmts stmts aStmts tail =
+  flattenStmt (last stmts) (init stmts) aStmts tail
 
 {- flattenStmt takes a Stmt, a list of preceding Stmt, a list of succeeding
 Stmt, and a Tail, and returns a new list of Stmt, a new Tail, and a list of new
 blocks. -}
 
-flattenStmt :: Lang.Stmt -> [Lang.Stmt] -> [Stmt] -> Tail -> ([Stmt],Tail,[Block])
+flattenStmt :: Lang.Stmt -> [Lang.Stmt] -> [Stmt] -> Tail ->
+               Flattener ([Stmt],Tail,[Block])
 flattenStmt stmt bStmts aStmts tail =
   case stmt of
     Lang.Decl vdecl expr -> continue $ Decl vdecl expr
     Lang.Exp expr -> continue $ Exp expr
     Lang.Assign expr expr' -> continue $ Assign expr expr'
     Lang.If expr cs as -> 
-      (bs,If expr (Goto "c") (Goto "a"),[sbb,cbb,abb] ++ bbbs ++ cbbs ++ abbs)
-      where sbb = makeBlock "ifseq" [] aStmts tail
-            (bs,bbt,bbbs) = flattenStmts bStmts [] tail
-            (cs',cbt,cbbs) = flattenStmts cs [] (Goto "ifseq")
-            (as',abt,abbs) = flattenStmts as [] (Goto "ifseq")
-            cbb = makeBlock "c" [] cs' cbt
-            abb = makeBlock "a" [] as' abt
-    Lang.While expr ss -> (bs,wseq,[sbb,wbb] ++ bbbs ++ wbbs)
-      where sbb = makeBlock "whileseq" [] aStmts tail
-            wseq = If expr (Goto "w") (Goto "whileseq")
-            (bs,bbt,bbbs) = flattenStmts bStmts [] wseq
-            (ws,wbt,wbbs) = flattenStmts ss [] wseq
-            wbb = makeBlock "w" [] ws wbt
-    Lang.Exit -> (bs,Exit,bbbs)
-      where (bs,bbt,bbbs) = flattenStmts bStmts [] Exit
-    Lang.Wait expr -> (bs,wseq,sbb:bbbs)
-      where sbb = makeBlock "waitseq" [] aStmts tail
-            wseq = GotoWait "waitseq"
-            (bs,bbt,bbbs) = flattenStmts (bStmts ++ [Lang.Exp expr]) [] wseq
-    Lang.Spawn (vs,ss) args -> (bs,Exit,[tbb] ++ tbbs ++ bbbs)
-      where spawn = spawnThread "newthread" args
-            (bs,bbt,bbbs) = flattenStmts bStmts (spawn ++ aStmts) tail
-            (ts,tbt,tbbs) = flattenStmts (ss) [] Exit
-            tbb = makeBlock "newthread" vs ts Exit
+      do let sbb = makeBlock "ifseq" [] aStmts tail
+         (bs,bbt,bbbs) <- flattenStmts bStmts [] tail
+         (cs',cbt,cbbs) <- flattenStmts cs [] (Goto "ifseq")
+         (as',abt,abbs) <- flattenStmts as [] (Goto "ifseq")
+         let cbb = makeBlock "c" [] cs' cbt
+         let abb = makeBlock "a" [] as' abt
+         return 
+           (bs,
+            If expr (Goto "c") (Goto "a"),
+            [sbb,cbb,abb] ++ bbbs ++ cbbs ++ abbs)
+    Lang.While expr ss ->
+      do let sbb = makeBlock "whileseq" [] aStmts tail
+             wseq = If expr (Goto "w") (Goto "whileseq")
+         (bs,bbt,bbbs) <- flattenStmts bStmts [] wseq
+         (ws,wbt,wbbs) <- flattenStmts ss [] wseq
+         let wbb = makeBlock "w" [] ws wbt
+         return (bs,wseq,[sbb,wbb] ++ bbbs ++ wbbs)
+    Lang.Exit ->
+      do (bs,bbt,bbbs) <- flattenStmts bStmts [] Exit
+         return (bs,Exit,bbbs)
+    Lang.Wait expr ->
+      do let sbb = makeBlock "waitseq" [] aStmts tail
+             wseq = GotoWait "waitseq"
+         (bs,bbt,bbbs) <- flattenStmts (bStmts ++ [Lang.Exp expr]) [] wseq
+         return (bs,wseq,sbb:bbbs)
+    Lang.Spawn (vs,ss) args ->
+      do let spawn = spawnThread "newthread" args
+         (bs,bbt,bbbs) <- flattenStmts bStmts (spawn ++ aStmts) tail
+         (ts,tbt,tbbs) <- flattenStmts (ss) [] Exit
+         let tbb = makeBlock "newthread" vs ts Exit
+         return (bs,Exit,[tbb] ++ tbbs ++ bbbs)
   where continue s = flattenStmts bStmts (s:aStmts) tail
 
 --}}}

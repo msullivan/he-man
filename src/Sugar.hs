@@ -2,7 +2,6 @@ module Sugar where
 
 import Lang
 import Control.Monad.RWS
-import Data.Functor.Identity
 
 type Prog = RWS () [Stmt] Int
 
