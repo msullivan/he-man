@@ -21,7 +21,7 @@ data Stmt = Decl Lang.VDecl Lang.Expr
 
 data Tail = If Lang.Expr Tail Tail
           | Goto BlockName
-          | GotoWait BlockName
+          | GotoWait Lang.Expr BlockName
           | Exit
           deriving (Eq, Ord, Show)
 
@@ -86,8 +86,8 @@ flattenStmt stmt bStmts aStmts tail =
          return (bs,Exit,bbbs)
     Lang.Wait expr ->
       do let sbb = makeBlock "waitseq" [] aStmts tail
-             wseq = GotoWait "waitseq"
-         (bs,bbt,bbbs) <- flattenStmts (bStmts ++ [Lang.Exp expr]) [] wseq
+             wseq = GotoWait expr "waitseq"
+         (bs,bbt,bbbs) <- flattenStmts bStmts [] wseq
          return (bs,wseq,sbb:bbbs)
     Lang.Spawn (vs,ss) args ->
       do let spawn = spawnThread "newthread" args
@@ -132,7 +132,7 @@ walk x xs = case lookup x xs of
 fMapTail f (x,vs,ss,tail) = (x,vs,ss,help tail) where
   help tail = case tail of
     Goto x -> f (Goto x)
-    GotoWait x -> GotoWait x
+    GotoWait e x -> GotoWait e x
     If e t t' -> f (If e (help t) (help t'))
     Exit -> Exit
 
@@ -185,7 +185,7 @@ testIfExit = flattenPrgm [Lang.Exp (Lang.NumLit 5),
                           Lang.Exp (Lang.NumLit 10)]
 
 {-
-[("main",[],[Exp (NumLit 10),Exp (Call (CFn "wfun") [])],GotoWait "waitseq"),
+[("main",[],[Exp (NumLit 10)],GotoWait (Call (CFn "wfun") []) "waitseq"),
  ("waitseq",[],[Exp (NumLit 11)],Exit)]
 -}
 testWait = flattenPrgm [Lang.Exp (Lang.NumLit 10),
