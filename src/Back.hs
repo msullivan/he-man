@@ -28,7 +28,12 @@ data Tail = If Lang.Expr Tail Tail
 
 --{{{ flattenPrgm
 
+flattenPrgm stmts = [makeBlock 0 [] s t] ++ bbs where
+  ((s,t,bbs),_) = runState (flattenStmts stmts [] Exit) (mainB + 1)
+  mainB = 0
+  
 makeBlock name decls stmts tail = (name,decls,stmts,tail)
+
 spawnThread name args = [Exp $ Lang.Call (Lang.CFn "spawn") args']
   where args' = (Lang.NumLit $ fromIntegral name):args
 
@@ -42,17 +47,6 @@ fresh2 = do
   y <- fresh
   return (x,y)
 
-{-
-flattenPrgm prgm = 
-  let (stmts,blocks) = runWriter $ flattenStmt "main" prgm 
-      mainBlock = makeBlock "main" [] stmts Exit in
-  mainBlock:blocks
--}
-
-flattenPrgm stmts = [makeBlock 0 [] s t] ++ bbs where
-  ((s,t,bbs),_) = runState (flattenStmts stmts [] Exit) (mainB + 1)
-  mainB = 0
-  
 {- flattenStmts takes a list of Stmts, a list of succeeding Stmts, and the Tail
 for that block, and returns a new list of Stmts, a new Tail, and a list of new
 blocks. -}
@@ -65,7 +59,13 @@ flattenStmts stmts aStmts tail =
 
 {- flattenStmt takes a Stmt, a list of preceding Stmt, a list of succeeding
 Stmt, and a Tail, and returns a new list of Stmt, a new Tail, and a list of new
-blocks. -}
+blocks. 
+
+Variable suffix conventions:
+T = tail
+B = basic block
+L = label
+-}
 
 flattenStmt :: Lang.Stmt -> [Lang.Stmt] -> [Stmt] -> Tail ->
                Flattener ([Stmt],Tail,[Block])
@@ -75,42 +75,40 @@ flattenStmt stmt bStmts aStmts tail =
     Lang.Exp expr -> continue $ Exp expr
     Lang.Assign expr expr' -> continue $ Assign expr expr'
     Lang.If expr cs as -> 
-      do seqB <- fresh
-         let sbb = makeBlock seqB [] aStmts tail
-         (bs,bbt,bbbs) <- flattenStmts bStmts [] tail
-         (cs',cbt,cbbs) <- flattenStmts cs [] (Goto seqB)
-         (as',abt,abbs) <- flattenStmts as [] (Goto seqB)
-         (conB,altB) <- fresh2
-         let cbb = makeBlock conB [] cs' cbt
-         let abb = makeBlock altB [] as' abt
-         return 
-           (bs,
-            If expr (Goto conB) (Goto altB),
-            [sbb,cbb,abb] ++ bbbs ++ cbbs ++ abbs)
+      do seqL <- fresh
+         let seqB = makeBlock seqL [] aStmts tail
+         (bs,_,bBs) <- flattenStmts bStmts [] tail
+         (cs',conT,conBs) <- flattenStmts cs [] (Goto seqL)
+         (as',altT,altBs) <- flattenStmts as [] (Goto seqL)
+         (conL,altL) <- fresh2
+         let conB = makeBlock conL [] cs' conT
+             altB = makeBlock altL [] as' altT
+             ifT = If expr (Goto conL) (Goto altL)
+         return (bs,ifT,[seqB,conB,altB] ++ bBs ++ conBs ++ altBs)
     Lang.While expr ss ->
-      do (seqB,whileB) <- fresh2
-         let sbb = makeBlock seqB [] aStmts tail
-             wseq = If expr (Goto whileB) (Goto seqB)
-         (bs,bbt,bbbs) <- flattenStmts bStmts [] wseq
-         (ws,wbt,wbbs) <- flattenStmts ss [] wseq
-         let wbb = makeBlock whileB [] ws wbt
-         return (bs,wseq,[sbb,wbb] ++ bbbs ++ wbbs)
+      do (seqL,whileL) <- fresh2
+         let seqB = makeBlock seqL [] aStmts tail
+             whileT = If expr (Goto whileL) (Goto seqL)
+         (bs,_,bBs) <- flattenStmts bStmts [] whileT
+         (ws,whileT',whileBs) <- flattenStmts ss [] whileT
+         let whileB = makeBlock whileL [] ws whileT'
+         return (bs,whileT,[seqB,whileB] ++ bBs ++ whileBs)
     Lang.Exit ->
-      do (bs,bbt,bbbs) <- flattenStmts bStmts [] Exit
-         return (bs,Exit,bbbs)
+      do (bs,_,bBs) <- flattenStmts bStmts [] Exit
+         return (bs,Exit,bBs)
     Lang.Wait expr ->
-      do seqB <- fresh
-         let sbb = makeBlock seqB [] aStmts tail
-             wseq = GotoWait seqB 
-         (bs,bbt,bbbs) <- flattenStmts (bStmts ++ [Lang.Exp expr]) [] wseq
-         return (bs,wseq,sbb:bbbs)
+      do seqL <- fresh
+         let seqB = makeBlock seqL [] aStmts tail
+             waitT = GotoWait seqL 
+         (bs,_,bBs) <- flattenStmts (bStmts ++ [Lang.Exp expr]) [] waitT
+         return (bs,waitT,seqB:bBs)
     Lang.Spawn (vs,ss) args ->
-      do threadB <- fresh
-         let spawn = spawnThread threadB args
-         (bs,bbt,bbbs) <- flattenStmts bStmts (spawn ++ aStmts) tail
-         (ts,tbt,tbbs) <- flattenStmts (ss) [] Exit
-         let tbb = makeBlock threadB vs ts Exit
-         return (bs,Exit,[tbb] ++ tbbs ++ bbbs)
+      do threadL <- fresh
+         let spawn = spawnThread threadL args
+         (bs,_,bBs) <- flattenStmts bStmts (spawn ++ aStmts) tail
+         (ts,tbt,threadBs) <- flattenStmts ss [] Exit
+         let threadB = makeBlock threadL vs ts Exit
+         return (bs,tail,[threadB] ++ threadBs ++ bBs)
   where continue s = flattenStmts bStmts (s:aStmts) tail
 
 --}}}
