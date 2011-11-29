@@ -24,10 +24,10 @@ data Tail = If Lang.Expr Tail Tail
 
 --{{{ flattenPrgm
 
-type Flattener = RWS () ([Block],[Thread]) Label
+type Flattener = RWS ThreadName ([Block],[Thread]) Label
 
 flattenPrgm stmts = ((0,0,s,t):blocks,(0,[]):thds) where
-  ((s,t),_,(blocks,thds)) = runRWS (flattenStmts stmts [] Exit 0) () 1
+  ((s,t),_,(blocks,thds)) = runRWS (flattenStmts stmts [] Exit) 0 1
   
 -- TODO
 spawnThread name args = [Exp $ Lang.Call (Lang.CFn "spawn") args']
@@ -45,70 +45,72 @@ fresh2 = do
   y <- fresh
   return (x,y)
 
-newBlock blockL thdL stmts tail = tell ([(blockL,thdL,stmts,tail)],mempty)
-newThread thdL vdecls = tell (mempty,[(thdL,vdecls)])
+newBlock blockL stmts tail = do
+  threadL <- ask
+  tell ([(blockL,threadL,stmts,tail)],mempty)
 
-{- flattenStmts takes a list of Stmts, a list of succeeding Stmts, the Tail for
-that block, and a thread number, and returns a new list of Stmts and a new Tail.
--}
+newThread threadL vdecls = tell (mempty,[(threadL,vdecls)])
 
-flattenStmts :: [Lang.Stmt] -> [Stmt] -> Tail -> ThreadName -> 
-                Flattener ([Stmt],Tail)
-flattenStmts [] aStmts tail thdL = return (aStmts,tail)
-flattenStmts stmts aStmts tail thdL =
-  flattenStmt (last stmts) (init stmts) aStmts tail thdL
+inThread threadL = local (\_ -> threadL)
+
+{- flattenStmts takes a list of Stmts, a list of succeeding Stmts, and the Tail
+for that block, and returns a new list of Stmts and a new Tail. -}
+
+flattenStmts :: [Lang.Stmt] -> [Stmt] -> Tail -> Flattener ([Stmt],Tail)
+flattenStmts [] aStmts tail = return (aStmts,tail)
+flattenStmts stmts aStmts tail =
+  flattenStmt (last stmts) (init stmts) aStmts tail
 
 {- flattenStmt takes a Stmt, a list of preceding Stmts, a list of succeeding
-Stmts, a Tail, and a thread number, and returns a new list of Stmts and a new
-Tail.
+Stmts, and a Tail, and returns a new list of Stmts and a new Tail.
 
 Variable suffix conventions:
 T = tail
 L = label
 -}
 
-flattenStmt :: Lang.Stmt -> [Lang.Stmt] -> [Stmt] -> Tail -> ThreadName ->
+flattenStmt :: Lang.Stmt -> [Lang.Stmt] -> [Stmt] -> Tail ->
                Flattener ([Stmt],Tail)
-flattenStmt stmt bStmts aStmts tail thdL =
+flattenStmt stmt bStmts aStmts tail =
   case stmt of
     Lang.Decl vdecl expr -> continue $ Decl vdecl expr
     Lang.Exp expr -> continue $ Exp expr
     Lang.Assign expr expr' -> continue $ Assign expr expr'
     Lang.If expr cs as -> 
       do seqL <- fresh
-         newBlock seqL thdL aStmts tail
-         (bs,_) <- flattenStmts bStmts [] tail thdL
-         (cs',conT) <- flattenStmts cs [] (Goto seqL) thdL
-         (as',altT) <- flattenStmts as [] (Goto seqL) thdL
+         newBlock seqL aStmts tail
+         (bs,_) <- flattenStmts bStmts [] tail
+         (cs',conT) <- flattenStmts cs [] (Goto seqL)
+         (as',altT) <- flattenStmts as [] (Goto seqL)
          (conL,altL) <- fresh2
-         newBlock conL thdL cs' conT
-         newBlock altL thdL as' altT
+         newBlock conL cs' conT
+         newBlock altL as' altT
          return (bs,If expr (Goto conL) (Goto altL))
     Lang.While expr ss ->
       do (seqL,whileL) <- fresh2
-         newBlock seqL thdL aStmts tail
+         newBlock seqL aStmts tail
          let whileT = If expr (Goto whileL) (Goto seqL)
-         (bs,_) <- flattenStmts bStmts [] whileT thdL
-         (ws,whileT') <- flattenStmts ss [] whileT thdL
-         newBlock whileL thdL ws whileT'
+         (bs,_) <- flattenStmts bStmts [] whileT
+         (ws,whileT') <- flattenStmts ss [] whileT
+         newBlock whileL ws whileT'
          return (bs,whileT)
     Lang.Exit ->
-      do (bs,_) <- flattenStmts bStmts [] Exit thdL
+      do (bs,_) <- flattenStmts bStmts [] Exit
          return (bs,Exit)
     Lang.Wait expr ->
       do seqL <- fresh
-         newBlock seqL thdL aStmts tail
-         (bs,_) <- flattenStmts (bStmts ++ (registerEvent expr)) [] tail thdL
+         newBlock seqL aStmts tail
+         (bs,_) <- flattenStmts (bStmts ++ (registerEvent expr)) [] tail
          return (bs,GotoWait seqL)
     Lang.Spawn (vs,ss) args ->
-      do newThreadL <- fresh
-         let spawn = spawnThread newThreadL args
-         (bs,_) <- flattenStmts bStmts (spawn ++ aStmts) tail thdL
-         (ts,_) <- flattenStmts ss [] Exit newThreadL
-         newThread newThreadL vs
-         newBlock newThreadL newThreadL ts Exit
+      do threadL <- fresh
+         let spawn = spawnThread threadL args
+         (bs,_) <- flattenStmts bStmts (spawn ++ aStmts) tail
+         (ts,threadT) <- inThread threadL $ flattenStmts ss [] Exit
+         inThread threadL $ newBlock threadL ts threadT
+         newThread threadL vs
          return (bs,tail)
-  where continue s = flattenStmts bStmts (s:aStmts) tail thdL
+  where continue s = flattenStmts bStmts (s:aStmts) tail
 
 --}}}
 --{{{ optimizeJumps
@@ -199,12 +201,15 @@ testSpawn = runPasses [Lang.Exp (Lang.NumLit 5),
 testSpawnIf = runPasses [Lang.Exp (Lang.NumLit 5),
                          Lang.Spawn ([("x",Lang.Int),("y",Lang.Bool)],
                            [Lang.Exp (Lang.NumLit 0),
+                            Lang.If (Lang.NumLit 6)
+                                    [Lang.Exit]
+                                    [Lang.Exp $ Lang.NumLit 100],
                             Lang.Exp (Lang.NumLit 1)])
                            [Lang.Var "arg1",Lang.Var "arg2"],
-                         Lang.If (Lang.NumLit 6)
+                         Lang.If (Lang.NumLit 7)
                                  [Lang.Exp $ Lang.Call (Lang.CFn "cfun") []]
                                  [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
-                         Lang.Exp (Lang.NumLit 7)]
+                         Lang.Exp (Lang.NumLit 8)]
 
 testOptimize = runPasses [Lang.If (Lang.NumLit 6)
                                   [Lang.Exit]
