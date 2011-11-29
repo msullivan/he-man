@@ -122,8 +122,8 @@ flattenStmt stmt bStmts aStmts tail =
 -- TODO fuse small non-empty blocks
 -- TODO eliminate blocks never jumped to (optimized If tail)
 
-optimizeJumps bs = map (fMapTail (flip walk xs)) bs'
-  where (bs',xs) = optimize bs []
+optimizeJumps bs = map (redirect ls) bs'
+  where (bs',ls) = optimize bs []
 
 optimize [] xs = ([],xs)
 optimize (b:bs) ls =
@@ -146,56 +146,64 @@ walk x xs = case lookup x xs of
   Just x' -> walk x' xs
   Nothing -> x
 
-fMapTail f (x,vs,ss,tail) = (x,vs,ss,help tail) where
+redirect ls (x,vs,ss,tail) = (x,vs,ss,help tail) where
   help tail = case tail of
-    Goto x -> f (Goto x)
+    Goto x -> walk (Goto x) ls
     GotoWait x -> GotoWait x
-    If e t t' -> f (If e (help t) (help t'))
+    If e t t' -> If e (help t) (help t')
     Exit -> Exit
+
+--}}}
+--{{{ collectFrees
+
+{- collectFrees 
+-}
 
 --}}}
 --{{{ Tests
 
-testFlat = flattenPrgm [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
+runPasses = optimizeJumps . flattenPrgm
 
-testIf = flattenPrgm [Lang.Exp (Lang.NumLit 5),
-                      Lang.If (Lang.NumLit 6)
-                              [Lang.Exp $ Lang.Call (Lang.CFn "cfun") []]
-                              [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
-                      Lang.Exp (Lang.NumLit 10)]
+testFlat = runPasses [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
 
-testWhile = flattenPrgm [Lang.Exp (Lang.NumLit 5),
-                         Lang.While (Lang.NumLit 6)
-                                    [Lang.Exp $ Lang.Call (Lang.CFn "rep") [],
-                                     Lang.Exp $ Lang.Call (Lang.CFn "rep2") []],
-                         Lang.Exp (Lang.NumLit 10)]
+testIf = runPasses [Lang.Exp (Lang.NumLit 5),
+                    Lang.If (Lang.NumLit 6)
+                            [Lang.Exp $ Lang.Call (Lang.CFn "cfun") []]
+                            [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
+                    Lang.Exp (Lang.NumLit 10)]
 
-testExit = flattenPrgm [Lang.Exp (Lang.NumLit 5),
-                        Lang.Exit,
-                        Lang.Exp (Lang.NumLit 6)]
+testWhile = runPasses [Lang.Exp (Lang.NumLit 5),
+                       Lang.While (Lang.NumLit 6)
+                                  [Lang.Exp $ Lang.Call (Lang.CFn "rep") [],
+                                   Lang.Exp $ Lang.Call (Lang.CFn "rep2") []],
+                       Lang.Exp (Lang.NumLit 10)]
 
-testIfExit = flattenPrgm [Lang.Exp (Lang.NumLit 5),
-                          Lang.If (Lang.NumLit 6)
+testExit = runPasses [Lang.Exp (Lang.NumLit 5),
+                      Lang.Exit,
+                      Lang.Exp (Lang.NumLit 6)]
+
+testIfExit = runPasses [Lang.Exp (Lang.NumLit 5),
+                        Lang.If (Lang.NumLit 6)
+                                [Lang.Exit]
+                                [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
+                        Lang.Exp (Lang.NumLit 10)]
+
+testWait = runPasses [Lang.Exp (Lang.NumLit 10),
+                      Lang.Wait (Lang.Call (Lang.CFn "wfun") []),
+                      Lang.Exp (Lang.NumLit 11)]
+
+testSpawn = runPasses [Lang.Exp (Lang.NumLit 5),
+                       Lang.Spawn ([("x",Lang.Int),("y",Lang.Bool)],
+                         [Lang.Exp (Lang.NumLit 10),
+                          Lang.Exp (Lang.NumLit 15)])
+                         [Lang.Var "arg1",Lang.Var "arg2"],
+                       Lang.Exp (Lang.NumLit 20)]
+
+testOptimize = runPasses [Lang.If (Lang.NumLit 6)
                                   [Lang.Exit]
-                                  [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
+                                  [Lang.If (Lang.NumLit 7)
+                                           [Lang.Exp (Lang.NumLit 8)]
+                                           [Lang.Exp (Lang.NumLit 9)]],
                           Lang.Exp (Lang.NumLit 10)]
-
-testWait = flattenPrgm [Lang.Exp (Lang.NumLit 10),
-                        Lang.Wait (Lang.Call (Lang.CFn "wfun") []),
-                        Lang.Exp (Lang.NumLit 11)]
-
-testSpawn = flattenPrgm [Lang.Exp (Lang.NumLit 5),
-                         Lang.Spawn ([("x",Lang.Int),("y",Lang.Bool)],
-                           [Lang.Exp (Lang.NumLit 10),
-                            Lang.Exp (Lang.NumLit 15)])
-                           [Lang.Var "arg1",Lang.Var "arg2"],
-                         Lang.Exp (Lang.NumLit 20)]
-
-testOptimize = flattenPrgm [Lang.If (Lang.NumLit 6)
-                                    [Lang.Exit]
-                                    [Lang.If (Lang.NumLit 7)
-                                             [Lang.Exp (Lang.NumLit 8)]
-                                             [Lang.Exp (Lang.NumLit 9)]],
-                            Lang.Exp (Lang.NumLit 10)]
 
 --}}}
