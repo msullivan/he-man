@@ -2,7 +2,7 @@ module Echo where
 
 import Lang
 import Back
-import BackPretty
+import Pretty
 import Sugar
 import Lib
 

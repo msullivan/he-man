@@ -1,5 +1,5 @@
 {-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
-module BackPretty where
+module Pretty where
 
 import qualified Lang
 import Back
@@ -15,20 +15,46 @@ instance PP a => PP [a] where
 commaSeparated docs = hcat $ intersperse comma docs
 block header body = header <> lbrace $$ nest 2 body $$ rbrace
 
+instance PP Lang.VDecl where
+  pretty (var,typ) = text (show typ) <+> text var
+
 instance PP Block where
   pretty (label,thread,stmts,tail) =
     block (text "Thread" <+> int thread <> comma <+>
            text "Block" <+> int label <> space)
           (vcat (map pretty stmts) $$ pretty tail)
 
+instance PP Lang.Stmt where
+  pretty s = case s of
+    Lang.Decl (var,typ) expr ->
+      text (show typ) <+> text var <+> equals <+> pretty expr
+    Lang.While expr stmts ->
+      block (text "while" <+> parens (pretty expr) <> space)
+            (vcat $ map pretty stmts)
+    Lang.If expr stmts stmts' ->
+      text "if" <+> parens (pretty expr) <+> lbrace
+        $$ nest 2 (vcat $ map pretty stmts)
+        $$ text "} else {"
+        $$ nest 2 (vcat $ map pretty stmts')
+        $$ rbrace
+    Lang.Assign expr expr' ->
+      pretty expr <+> colon <> equals <+> pretty expr'
+    Lang.Spawn (vdecls,stmts) exprs ->
+      block (text "spawn" <> parens (commaSeparated $ args))
+            (vcat $ map pretty stmts) where
+      args = zipWith (\x y -> pretty x <+> equals <+> pretty y) vdecls exprs
+    Lang.Exp expr -> pretty expr
+    Lang.Wait expr -> text "wait" <> parens (pretty expr)
+    Lang.Exit -> text "exit"
+
 instance PP Stmt where
   pretty s = case s of
-    Decl (var,typ) expr ->
-      text (show typ) <+> text var <+> equals <+> pretty expr
+    Decl vdecl expr ->
+      pretty vdecl <+> equals <+> pretty expr
     Assign expr expr' ->
       pretty expr <+> colon <> equals <+> pretty expr'
     Spawn label exprs ->
-      text "Spawn" <+> text (show label) <>
+      text "spawn" <+> text (show label) <>
         (parens $ commaSeparated $ map pretty exprs)
     Exp expr -> pretty expr
 
@@ -50,12 +76,12 @@ instance PP Lang.Expr where
 instance PP Tail where
   pretty t = case t of
     If expr tail tail' ->
-      text "If" <+> parens (pretty expr)
+      text "if" <+> parens (pretty expr)
         $$ nest 2 (pretty tail)
         $$ nest 2 (pretty tail')
-    GotoWait label -> text "GotoWait" <+> int label
-    Goto label -> text "Goto" <+> int label
-    Exit -> text "Exit"
+    GotoWait label -> text "gotoWait" <+> int label
+    Goto label -> text "goto" <+> int label
+    Exit -> text "exit"
 
 instance PP Lang.ArithOp where
   pretty o = case o of
