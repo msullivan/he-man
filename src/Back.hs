@@ -2,6 +2,9 @@ module Back where
 
 import qualified Lang
 import Control.Monad.RWS
+import Control.Monad.Writer
+import qualified Data.Set as Set
+import Data.Maybe
 
 type Prgm = [Block]
 
@@ -156,12 +159,67 @@ redirect ls (x,vs,ss,tail) = (x,vs,ss,help tail) where
 
 {- collectFrees determines, for each thread, the variables which must be
 retained across multiple blocks, and adds those to the list of thread-local
-variables. -}
+variables. 
+
+*** This pass assumes all declared variables are unique! ***
+We enforce this constraint in the front-end. -}
+
+collectFrees (blocks,threads) = (blocks,map (collectThread blocks) threads)
+
+collectThread :: [Block] -> Thread -> Thread
+collectThread blocks (thread,vdecls) = (thread,map getDecl (Set.toList frees'))
+  where threadBlocks = filter (\(_,t,_,_) -> t == thread) blocks
+        (decls,frees) = mconcat $ map collectBlock threadBlocks
+        frees' = frees Set.\\ Set.fromList (map fst vdecls)
+        getDecl free = (free,fromJust $ lookup free (Set.toList decls))
+        -- fromJust exception <=> encountered a truly free variable
+
+type Collector = Writer (Set.Set Lang.VDecl,Set.Set Lang.Var)
+
+collectBlock (label,thread,stmts,tail) = (decls,frees')
+  where collect = do mapM_ collectStmt stmts
+                     collectTail tail
+        ((),(decls,frees)) = runWriter collect
+        frees' = frees Set.\\ Set.map fst decls
+
+collectStmt s = case s of
+  Decl vdecl expr ->
+    do tell (Set.singleton vdecl,mempty)
+       collectExpr expr
+  Assign expr expr' ->
+    do collectExpr expr
+       collectExpr expr'
+  Spawn _ exprs -> mapM_ collectExpr exprs
+  Exp expr -> collectExpr expr
+
+collectExpr e = case e of
+  Lang.Call _ exprs -> mapM_ collectExpr exprs
+  Lang.Arith _ expr expr' ->
+    do collectExpr expr
+       collectExpr expr'
+  Lang.ArithUnop _ expr -> collectExpr expr
+  Lang.RelnOp _ expr expr' ->
+    do collectExpr expr
+       collectExpr expr'
+  Lang.Var var -> tell (mempty,Set.singleton var)
+  Lang.Constant _ -> return ()
+  Lang.NumLit _ -> return ()
+  Lang.StringLit _ -> return ()
+
+collectTail t = case t of
+  If expr tail tail' ->
+    do collectExpr expr
+       collectTail tail
+       collectTail tail'
+  Goto _ -> return ()
+  GotoWait _ -> return ()
+  Exit -> return ()
 
 --}}}
 --{{{ Tests
 
-runPasses = optimizeJumps . (fst . flattenPrgm)
+mapFst f (x,y) = (f x,y)
+runPasses = collectFrees . (mapFst optimizeJumps) . flattenPrgm
 
 testFlat = runPasses [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
 
@@ -217,5 +275,13 @@ testOptimize = runPasses [Lang.If (Lang.NumLit 6)
                                            [Lang.Exp (Lang.NumLit 8)]
                                            [Lang.Exp (Lang.NumLit 9)]],
                           Lang.Exp (Lang.NumLit 10)]
+
+testCollect = runPasses [Lang.Decl ("y",Lang.Int) (Lang.NumLit 2),
+                         Lang.Decl ("x",Lang.Int) (Lang.NumLit 2),
+                         Lang.Exp $
+                           Lang.Arith Lang.Plus (Lang.Var "y") (Lang.Var "x"),
+                         Lang.If (Lang.Var "y")
+                                 [Lang.Exit]
+                                 [Lang.Exp $ Lang.Var "y"]]
 
 --}}}
