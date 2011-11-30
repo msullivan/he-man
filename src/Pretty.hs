@@ -6,23 +6,22 @@ import Back
 import Text.PrettyPrint
 import Data.List
 
+commaSeparated docs = hcat $ intersperse comma docs
+block header body = header <> lbrace $$ nest 2 body $$ rbrace
+
+--{{{ Class declaration
+
 class PP a where
   pretty :: a -> Doc
 
 instance PP a => PP [a] where
   pretty xs = vcat $ map pretty xs
 
-commaSeparated docs = hcat $ intersperse comma docs
-block header body = header <> lbrace $$ nest 2 body $$ rbrace
+--}}}
+--{{{ Front-end grammar
 
 instance PP Lang.VDecl where
   pretty (var,typ) = text (show typ) <+> text var
-
-instance PP Block where
-  pretty (label,thread,stmts,tail) =
-    block (text "Thread" <+> int thread <> comma <+>
-           text "Block" <+> int label <> space)
-          (vcat (map pretty stmts) $$ pretty tail)
 
 instance PP Lang.Stmt where
   pretty s = case s of
@@ -30,33 +29,20 @@ instance PP Lang.Stmt where
       text (show typ) <+> text var <+> equals <+> pretty expr
     Lang.While expr stmts ->
       block (text "while" <+> parens (pretty expr) <> space)
-            (vcat $ map pretty stmts)
+            (pretty stmts)
     Lang.If expr stmts stmts' ->
       text "if" <+> parens (pretty expr) <+> lbrace
-        $$ nest 2 (vcat $ map pretty stmts)
-        $$ text "} else {"
-        $$ nest 2 (vcat $ map pretty stmts')
-        $$ rbrace
+        $$ nest 2 (pretty stmts) $$ text "} else {"
+        $$ nest 2 (pretty stmts') $$ rbrace
     Lang.Assign expr expr' ->
       pretty expr <+> colon <> equals <+> pretty expr'
     Lang.Spawn (vdecls,stmts) exprs ->
       block (text "spawn" <> parens (commaSeparated $ args))
-            (vcat $ map pretty stmts) where
+            (pretty stmts) where
       args = zipWith (\x y -> pretty x <+> equals <+> pretty y) vdecls exprs
     Lang.Exp expr -> pretty expr
     Lang.Wait expr -> text "wait" <> parens (pretty expr)
     Lang.Exit -> text "exit"
-
-instance PP Stmt where
-  pretty s = case s of
-    Decl vdecl expr ->
-      pretty vdecl <+> equals <+> pretty expr
-    Assign expr expr' ->
-      pretty expr <+> colon <> equals <+> pretty expr'
-    Spawn label exprs ->
-      text "spawn" <+> text (show label) <>
-        (parens $ commaSeparated $ map pretty exprs)
-    Exp expr -> pretty expr
 
 instance PP Lang.Expr where
   pretty e = case e of
@@ -73,6 +59,26 @@ instance PP Lang.Expr where
     Lang.StringLit s -> text s
     Lang.Var v -> text v
 
+--}}}
+--{{{ Back-end grammar
+
+instance PP Block where
+  pretty (label,thread,stmts,tail) =
+    block (text "Thread" <+> int thread <> comma <+>
+           text "Block" <+> int label <> space)
+          (pretty stmts $$ pretty tail)
+
+instance PP Stmt where
+  pretty s = case s of
+    Decl vdecl expr ->
+      pretty vdecl <+> equals <+> pretty expr
+    Assign expr expr' ->
+      pretty expr <+> colon <> equals <+> pretty expr'
+    Spawn label exprs ->
+      text "spawn" <+> text (show label) <>
+        (parens $ commaSeparated $ map pretty exprs)
+    Exp expr -> pretty expr
+
 instance PP Tail where
   pretty t = case t of
     If expr tail tail' ->
@@ -82,6 +88,9 @@ instance PP Tail where
     GotoWait label -> text "gotoWait" <+> int label
     Goto label -> text "goto" <+> int label
     Exit -> text "exit"
+
+--}}}
+--{{{ Operators
 
 instance PP Lang.ArithOp where
   pretty o = case o of
@@ -107,3 +116,4 @@ instance PP Lang.RelnOp where
     Lang.Less -> text "<"
     Lang.Greater -> text ">"
 
+--}}}
