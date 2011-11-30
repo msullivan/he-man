@@ -167,12 +167,13 @@ We enforce this constraint in the front-end. -}
 collectFrees (blocks,threads) = (blocks,map (collectThread blocks) threads)
 
 collectThread :: [Block] -> Thread -> Thread
-collectThread blocks (thread,vdecls) = (thread,map getDecl (Set.toList frees'))
+collectThread blocks (thread,vdecls) = (thread,vdecls')
   where threadBlocks = filter (\(_,t,_,_) -> t == thread) blocks
         (decls,frees) = mconcat $ map collectBlock threadBlocks
         frees' = frees Set.\\ Set.fromList (map fst vdecls)
         getDecl free = (free,fromJust $ lookup free (Set.toList decls))
         -- fromJust exception <=> encountered a truly free variable
+        vdecls' = vdecls ++ map getDecl (Set.toList frees')
 
 type Collector = Writer (Set.Set Lang.VDecl,Set.Set Lang.Var)
 

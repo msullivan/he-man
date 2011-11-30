@@ -1,6 +1,7 @@
 module Echo where
 
 import Lang
+import Back
 import Sugar
 import Lib
 
@@ -38,3 +39,4 @@ main_loop = do
     fd' <- accept fd e
     spawn child_code [fd']
 main_loop_code = compile main_loop
+main_loop_back = runPasses $ compile main_loop
