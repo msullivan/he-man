@@ -5,8 +5,6 @@ type Var = String
 type VDecl = (Var, Type)
 type ThreadCode = ([VDecl], Block)
 
-data Type = Int | Bool | String | FD | Buffer | Event -- | ThreadT
-          deriving (Eq, Ord, Show)
 data Stmt = Decl VDecl Expr
           | While Expr Block
           | If Expr Block Block
@@ -15,6 +13,9 @@ data Stmt = Decl VDecl Expr
           | Exp Expr
           | Wait Expr
           | Exit
+          deriving (Eq, Ord, Show)
+
+data Type = Int | Bool | String | FD | Buffer | Event -- | ThreadT
           deriving (Eq, Ord, Show)
 data Expr = Call Prim [Expr]
           | Arith ArithOp Expr Expr

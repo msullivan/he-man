@@ -5,7 +5,7 @@ are meant for use outside this module.
 \begin{code}
 module CLib where
 
-import Language.C hiding (cChar)
+import Language.C hiding (cChar, pretty)
 import qualified Language.C
 \end{code}
 
@@ -260,6 +260,11 @@ cSwitchBlock expr cases = cSwitch expr (cCompound (map (Left . f) cases)) where
   f (Just expr,stmts) = cCase expr $ cCompound $ map Left (stmts ++ [cBreak])
 \end{code}
 
+Pretty prints a program
+\begin{code}
+pretty = Language.C.pretty
+
+\end{code}
 % }}}
 \subsection{Tests} % {{{
 \begin{code}

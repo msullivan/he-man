@@ -15,8 +15,8 @@ type Thread = (ThreadName, [Lang.VDecl])
 
 data Stmt = Decl Lang.VDecl Lang.Expr
           | Assign Lang.Expr Lang.Expr
-          | Spawn Label [Lang.Expr]
           | Exp Lang.Expr
+          | Spawn Label [Lang.Expr]
           deriving (Eq, Ord, Show)
 
 data Tail = If Lang.Expr Tail Tail

@@ -24,6 +24,11 @@ sock_write fd buf len =
 new_buf size =
   call (CFn "new_buf") Buffer [size]
 
+-- For debugging
+print_int n  =
+  call (CFn "print_int") Int [n]
+
+
 -- TODO: a bunch more
 
 ------------------------------ Library code
