@@ -108,11 +108,16 @@ abstractDeclr indirs = CDeclr Nothing indirs Nothing [] undefNode
 \end{code}
 
 Function declarations require an identifier, a list of parameters, a return type
-(list), and a body statement. Each parameter is a tuple of
-\tt{CDeclarationSpecifier}s, indirections, and an identifier.
+(list), and, if a function definition, a body statement. Each parameter is a
+tuple of \tt{CDeclarationSpecifier}s, indirections, and an identifier.
 \begin{code}
 cFunction id params typs body = CFDefExt $ CFunDef typs
   (declr id [cFun $ map f params]) [] body undefNode where
+  cFun params = CFunDeclr (Right (params,False)) [] undefNode
+  f (typs,indirs,id) = cDecl typs indirs id Nothing
+
+cFunDecl id params typs = CDeclExt $ CDecl typs
+  [(Just $ declr id [cFun $ map f params],Nothing,Nothing)] undefNode where
   cFun params = CFunDeclr (Right (params,False)) [] undefNode
   f (typs,indirs,id) = cDecl typs indirs id Nothing
 \end{code}
@@ -307,6 +312,7 @@ test5 = pretty $ cFile
    cTypedef (cEnum "Color") [] "enumcolor",
    cDeclExt [cType "nodeptr"] [] "node" (Just $ cVar "null"),
    cDeclExt [cChar] [] "a" Nothing,
+   cFunDecl "externalFun" [([cChar],[],"c")] [cInt],
    cFunction "main" [([cInt],[],"x")] [cInt]
    (cCompound [Right $ cDecl [cChar] [] "a" Nothing,
                Right $ cDecl [cInt] [cArray $ Just $ cIntConst 5] "b" Nothing,

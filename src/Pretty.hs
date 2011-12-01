@@ -56,7 +56,7 @@ instance PP Lang.Expr where
       pretty expr <+> pretty op <+> pretty expr'
     Lang.Constant c -> text c
     Lang.NumLit i -> integer i
-    Lang.StringLit s -> text s
+    Lang.StringLit s -> doubleQuotes (text s)
     Lang.Var v -> text v
 
 --}}}
@@ -112,7 +112,7 @@ instance PP Lang.ArithUnop where
 
 instance PP Lang.RelnOp where
   pretty o = case o of
-    Lang.Eq -> text "="
+    Lang.Eq -> text "=="
     Lang.Less -> text "<"
     Lang.Greater -> text ">"
 
