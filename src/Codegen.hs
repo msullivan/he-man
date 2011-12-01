@@ -13,6 +13,7 @@ translateType Bool = cBool
 hasVar vars x = isJust $ find (\(y, _) -> x == y) vars
 
 blockName id = "block" ++ show id
+threadName id = "thread" ++ show id
 
 translateExpr vars expr =
   case expr of
@@ -40,20 +41,26 @@ translateTail vars tail =
     GotoWait target -> [jump target, return 0]
     If e t1 t2 -> [Left $
       cIfThen (translateExpr vars e) (cCompound (translateTail vars t1))
-      (Just (cCompound (translateTail vars t1)))]
+      (Just (cCompound (translateTail vars t2)))]
 
     where return n = Left $ cReturn (cIntConst n)
           jump target = Left $ cExpr (cAssign
                                       (cArrow (cVar "thread") "cont")
                                       (cVar (blockName target)))
 
+translateThread (name, vars) =
+  [cStructDecl sname (map declVar vars),
+   cTypedef (cStruct sname) [] sname]
+  where declVar (x, t) = cDecl [translateType t] [] x Nothing
+        sname = threadName name
 
 translateBlock threads (id, thread, stmts, tail) =
-  cFunction (blockName id) [] [cInt]
+  cFunction (blockName id) [([cType "thread"],[cPtr],"thread")] [cInt]
   (cCompound (map (translateStmt vars) stmts 
               ++ translateTail vars tail))
     where Just vars = lookup thread threads
 
 translateProgram :: ([Block], [Thread]) -> Text.PrettyPrint.HughesPJ.Doc
 translateProgram (blocks, threads) =
-  pretty $ cFile (map (translateBlock threads) blocks)
+  pretty $ cFile (concatMap translateThread threads ++ 
+                  map (translateBlock threads) blocks)
