@@ -12,9 +12,11 @@ translateType Bool = cBool
 
 hasVar vars x = isJust $ find (\(y, _) -> x == y) vars
 
+blockName id = "block" ++ show id
+
 translateExpr vars expr =
   case expr of
-    Var x -> if hasVar vars x then cArrow (cVar "thread") x else cVar x
+    Var x -> if hasVar vars x then cArrow (cVar "threadp") x else cVar x
     Call (CFn f) args -> cCall (cVar f) (map trans args)
     NumLit n -> cIntConst n
     -- TODO all of it, I think
@@ -33,10 +35,21 @@ translateStmt vars stmt =
 
 translateTail vars tail =
   case tail of
-    Exit -> [Left (cReturn (cIntConst 0))]
+    Exit -> [return 0]
+    Goto target -> [jump target, return 1]
+    GotoWait target -> [jump target, return 0]
+    If e t1 t2 -> [Left $
+      cIfThen (translateExpr vars e) (cCompound (translateTail vars t1))
+      (Just (cCompound (translateTail vars t1)))]
+
+    where return n = Left $ cReturn (cIntConst n)
+          jump target = Left $ cExpr (cAssign
+                                      (cArrow (cVar "thread") "cont")
+                                      (cVar (blockName target)))
+
 
 translateBlock threads (id, thread, stmts, tail) =
-  cFunction ("block" ++ show id) [] [cInt]
+  cFunction (blockName id) [] [cInt]
   (cCompound (map (translateStmt vars) stmts 
               ++ translateTail vars tail))
     where Just vars = lookup thread threads
