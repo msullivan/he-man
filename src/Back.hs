@@ -108,11 +108,11 @@ flattenStmt stmt bStmts aStmts tail =
     Lang.Spawn (vs,ss) args ->
       do threadL <- fresh
          let spawn = Spawn threadL (zip vs args)
-         (bs,_) <- flattenStmts bStmts (spawn:aStmts) tail
+         (bs,tail') <- flattenStmts bStmts (spawn:aStmts) tail
          (ts,threadT) <- inThread threadL $ flattenStmts ss [] Exit
          inThread threadL $ newBlock threadL ts threadT
          newThread threadL vs
-         return (bs,tail)
+         return (bs,tail')
   where continue s = flattenStmts bStmts (s:aStmts) tail
 
 --}}}
@@ -136,6 +136,10 @@ optimize (b:bs) ls =
     let (bs',ls') = optimize bs ((Goto label,walk (Goto g) ls):ls) in (bs',ls')
   (label,vs,[],Exit) ->
     optimize bs ((Goto label,Exit):ls)
+  (label,vs,stmts,If (Lang.NumLit 0) c a) ->
+    optimize ((label,vs,stmts,c):bs) ls
+  (label,vs,stmts,If e c a) | knownConstantExpr e ->
+    optimize ((label,vs,stmts,c):bs) ls
   (label,vs,[],If e (Goto g) (Goto g')) ->
     let tail = walk (Goto g) ls
         tail' = walk (Goto g') ls
@@ -153,6 +157,12 @@ redirect ls (x,vs,ss,tail) = (x,vs,ss,help tail) where
     GotoWait x -> GotoWait x
     If e t t' -> If e (help t) (help t')
     Exit -> Exit
+
+knownConstantExpr expr =
+  case expr of
+    Lang.NumLit n -> True
+    Lang.StringLit s -> True
+    _ -> False
 
 --}}}
 --{{{ collectFrees
