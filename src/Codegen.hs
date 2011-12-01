@@ -7,21 +7,56 @@ import Data.List
 import Data.Maybe
 import qualified Text.PrettyPrint.HughesPJ
 
-translateType Int = cInt
-translateType Bool = cBool
-
 hasVar vars x = isJust $ find (\(y, _) -> x == y) vars
 
 blockName id = "block" ++ show id
 threadName id = "thread" ++ show id
 
+translateType t =
+  case t of
+    Int -> cInt
+    Bool -> cBool
+    -- TODO
+    String -> cType "string"
+    FD -> cType "FD"
+    Buffer -> cType "Buffer"
+    Event -> cType "Event"
+
 translateExpr vars expr =
   case expr of
     Var x -> if hasVar vars x then cArrow (cVar "thread_priv") x else cVar x
     Call (CFn f) args -> cCall (cVar f) (map trans args)
+    Arith op e e' -> (translateArith op) (trans e) (trans e')
+    ArithUnop op e -> (translateArithUnop op) (trans e)
+    RelnOp op e e' -> (translateRelnOp op) (trans e) (trans e')
+    Constant s -> cVar s
     NumLit n -> cIntConst n
-    -- TODO all of it, I think
-    where trans = translateExpr vars
+    StringLit s -> cStrConst s
+  where trans = translateExpr vars
+
+translateArith op =
+  case op of
+    Plus -> cAdd
+    Times -> cMul
+    Minus -> cSub
+    Div -> cDiv
+    Mod -> cMod
+    And -> cLand
+    Or -> cLor
+    Xor -> cXor -- XXX bitwise!
+    Rsh -> cShr
+    Lsh -> cShl
+
+translateArithUnop op =
+  case op of
+    Negate -> cNeg
+    Not -> cLnot
+
+translateRelnOp op =
+  case op of
+    Eq -> cEq
+    Less -> cLt
+    Greater -> cGt
 
 translateStmt vars stmt =
   case stmt of
@@ -32,6 +67,7 @@ translateStmt vars stmt =
         Right $ cDecl [translateType t] [] x (Just $ transE e)
     Assign e1 e2 -> Left $ cExpr (cAssign (transE e1) (transE e2))
     Exp e -> Left $ cExpr $ transE e
+    -- TODO Spawn
     where transE = translateExpr vars
 
 translateTail vars tail =

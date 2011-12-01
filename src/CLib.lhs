@@ -154,6 +154,7 @@ cAddr = unaryOp CAdrOp        -- &expr
 cDeref = unaryOp CIndOp       -- *expr
 cNot = unaryOp CCompOp        -- ~expr
 cLnot = unaryOp CNegOp        -- !expr
+cNeg = unaryOp CMinOp         -- -expr
 
 unaryOp op expr = CUnary op expr undefNode
 \end{code}
