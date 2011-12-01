@@ -17,7 +17,7 @@ threadName id = "thread" ++ show id
 
 translateExpr vars expr =
   case expr of
-    Var x -> if hasVar vars x then cArrow (cVar "threadp") x else cVar x
+    Var x -> if hasVar vars x then cArrow (cVar "thread_priv") x else cVar x
     Call (CFn f) args -> cCall (cVar f) (map trans args)
     NumLit n -> cIntConst n
     -- TODO all of it, I think
@@ -50,15 +50,19 @@ translateTail vars tail =
 
 translateThread (name, vars) =
   [cStructDecl sname (map declVar vars),
-   cTypedef (cStruct sname) [] sname]
+   cTypedef (cStruct sname) [cPtr] (sname ++ "_p")]
   where declVar (x, t) = cDecl [translateType t] [] x Nothing
         sname = threadName name
 
 translateBlock threads (id, thread, stmts, tail) =
   cFunction (blockName id) [([cType "thread"],[cPtr],"thread")] [cInt]
-  (cCompound (map (translateStmt vars) stmts 
-              ++ translateTail vars tail))
+  (cCompound (
+      [Right $ cDecl [threadType] [] "thread_priv" 
+       (Just (cCast threadType (cVar "thread")))] ++
+      map (translateStmt vars) stmts ++
+      translateTail vars tail))
     where Just vars = lookup thread threads
+          threadType = cType (threadName thread ++ "_p")
 
 translateProgram :: ([Block], [Thread]) -> Text.PrettyPrint.HughesPJ.Doc
 translateProgram (blocks, threads) =
