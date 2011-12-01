@@ -51,15 +51,18 @@ call fn t args = var "tmp" t (Call fn args)
 spawn :: ThreadCode -> [Expr] -> Prog ()
 spawn thread args = add $ Spawn thread args
 
+extract :: Prog a -> Prog (a, [Stmt])
+extract m = censor (const []) (listen m)
+
 while :: Expr -> Prog a -> Prog ()
 while e body = do
-  (_, bodyStmts) <- listen body
+  (_, bodyStmts) <- extract body
   add $ While e bodyStmts
 
 ifE :: Expr -> Prog a -> Prog b -> Prog ()
 ifE e thenBody elseBody = do
-  (_, thenStmts) <- listen thenBody
-  (_, elseStmts) <- listen elseBody
+  (_, thenStmts) <- extract thenBody
+  (_, elseStmts) <- extract elseBody
   add $ If e thenStmts elseStmts
   
 ifE' :: Expr -> Prog a -> Prog ()
