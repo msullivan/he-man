@@ -16,7 +16,7 @@ type Thread = (ThreadName, [Lang.VDecl])
 data Stmt = Decl Lang.VDecl Lang.Expr
           | Assign Lang.Expr Lang.Expr
           | Exp Lang.Expr
-          | Spawn Label [Lang.Expr]
+          | Spawn Label [(Lang.VDecl, Lang.Expr)]
           deriving (Eq, Ord, Show)
 
 data Tail = If Lang.Expr Tail Tail
@@ -32,12 +32,12 @@ type Flattener = RWS ThreadName ([Block],[Thread]) Label
 flattenPrgm stmts = ((0,0,s,t):blocks,(0,[]):thds) where
   ((s,t),_,(blocks,thds)) = runRWS (flattenStmts stmts [] Exit) 0 1
   
--- TODO
-spawnThread name args = [Exp $ Lang.Call (Lang.CFn "spawn") args']
-  where args' = (Lang.NumLit $ fromIntegral name):args
-
--- TODO
-registerEvent event = [Lang.Exp $ Lang.Call (Lang.CFn "register") [event]]
+-- This is a frumious hack. register_event needs to take the current
+-- thread as an argument. We take advantage of the codegen implementation
+-- detail that the current thread variable will be named "thread".
+registerEvent event = [Lang.Exp $
+                       Lang.Call (Lang.CFn "register_event")
+                       [Lang.Var "thread", event]]
 
 fresh = do
   x <- get
@@ -107,8 +107,8 @@ flattenStmt stmt bStmts aStmts tail =
          return (bs,GotoWait seqL)
     Lang.Spawn (vs,ss) args ->
       do threadL <- fresh
-         let spawn = spawnThread threadL args
-         (bs,_) <- flattenStmts bStmts (spawn ++ aStmts) tail
+         let spawn = Spawn threadL (zip vs args)
+         (bs,_) <- flattenStmts bStmts (spawn:aStmts) tail
          (ts,threadT) <- inThread threadL $ flattenStmts ss [] Exit
          inThread threadL $ newBlock threadL ts threadT
          newThread threadL vs
@@ -190,7 +190,7 @@ collectStmt s = case s of
   Assign expr expr' ->
     do collectExpr expr
        collectExpr expr'
-  Spawn _ exprs -> mapM_ collectExpr exprs
+  Spawn _ exprs -> mapM_ (collectExpr . snd) exprs
   Exp expr -> collectExpr expr
 
 collectExpr e = case e of

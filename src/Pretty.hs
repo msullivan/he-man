@@ -76,7 +76,7 @@ instance PP Stmt where
       pretty expr <+> colon <> equals <+> pretty expr'
     Spawn label exprs ->
       text "spawn" <+> text (show label) <>
-        (parens $ commaSeparated $ map pretty exprs)
+        (parens $ commaSeparated $ map (pretty . snd) exprs)
     Exp expr -> pretty expr
 
 instance PP Tail where
