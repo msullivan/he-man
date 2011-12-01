@@ -32,7 +32,8 @@ child_code = declare_thread [("child_fd", Int)] $
   while 1 $ do
     amount_read <- do_read child_fd e buf bufsize
     ifE' (amount_read .== 0) exit
-    full_write child_fd e buf amount_read
+    amount_written <- full_write child_fd e buf amount_read
+    ifE' (amount_written .< amount_read) exit
 
 main_loop = do
   (fd, e) <- setup_listener port

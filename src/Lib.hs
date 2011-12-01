@@ -53,9 +53,11 @@ accept fd e = do_nb_action e (sock_accept fd)
 do_read fd e buf size = do_nb_action e (sock_read fd buf size)
 do_write fd e buf size = do_nb_action e (sock_write fd buf size)
 
--- TODO: error checking
 full_write fd e buf size = do
   amt_written <- var "amt_written" Int 0
-  while (amt_written .< size) $ do
+  failed <- var "write_failed" Int 0
+  while (amt_written .< size .&& failed .== 0) $ do
     amt <- do_write fd e (buf + amt_written) (size - amt_written)
     amt_written .= amt_written + amt
+    ifE' (amt .== 0) $ do failed .= 1
+  return amt_written

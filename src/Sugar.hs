@@ -71,6 +71,10 @@ ifE' e thenBody = ifE e thenBody (return ())
 (.<) = RelnOp Less
 (.>) = RelnOp Greater
 (.==) = RelnOp Eq
+(.&&) = Arith And
+(.||) = Arith Or
+
+
 
 -- Helper to construct a ThreadCode - kind of annoying
 declare_thread :: [VDecl] -> ([Expr] -> Prog ()) -> ThreadCode
