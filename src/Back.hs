@@ -98,8 +98,8 @@ flattenStmt stmt bStmts aStmts tail =
          newBlock whileL ws whileT'
          return (bs,whileT)
     Lang.Exit ->
-      do (bs,_) <- flattenStmts bStmts [] Exit
-         return (bs,Exit)
+      do (bs, tail) <- flattenStmts bStmts [] Exit
+         return (bs, tail)
     Lang.Wait expr ->
       do seqL <- fresh
          newBlock seqL aStmts tail
