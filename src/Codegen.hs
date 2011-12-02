@@ -24,15 +24,15 @@ threadName id = "thread" ++ show id
 translateThread (name, vars) =
   cTypedef (cStructType sname (map declVar vars)) [] tydefName
   where declVar (x, t) = cDecl [translateType t] [] x Nothing
-        sname = threadName name ++ "_t"
+        sname = threadName name
         -- This is a frumious hack to sneak in a toplevel invocation of
         -- DECLARE_THREAD
-        tydefName = sname ++ "; DECLARE_THREAD(" ++ sname ++ ")"
+        tydefName = sname ++ "_t; DECLARE_THREAD(" ++ sname ++ ")"
 
 translateBlock threads (id, thread, stmts, tail) =
   cFunction (blockName id) [([cType "thread_t"],[cPtr],"thread")] [cInt]
   (cCompound (
-      [Right $ cDecl [threadType] [] "thread_priv" 
+      [Right $ cDecl [threadType] [cPtr] "thread_priv" 
        (Just (cCast threadType [cPtr] (cVar "thread")))] ++
       map (translateStmt vars) stmts ++
       translateTail vars tail))
@@ -85,10 +85,10 @@ translateType t =
     Int -> cInt
     Bool -> cBool
     FD -> cInt
-    Event -> cType "event_t"
+    Event -> cType "eventp"
     -- TODO
     String -> cType "string"
-    Buffer -> cType "Buffer"
+    Buffer -> cType "bufp"
 
 --}}}
 --{{{ Operators

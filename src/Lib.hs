@@ -5,7 +5,7 @@ import Sugar
 
 -- Coreish runtime functions
 mk_nb_event fd modes =
-  call (CFn "mk_nb_event") Int [CurThread, fd, modes]
+  call (CFn "mk_nb_event") Event [CurThread, fd, modes]
 -- This is kind of lame
 new_buf size =
   call (CFn "new_buf") Buffer [CurThread, size]
