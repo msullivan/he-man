@@ -33,7 +33,7 @@ cInt = CTypeSpec $ CIntType undefNode
 cLong = CTypeSpec $ CLongType undefNode
 cSigned = CTypeSpec $ CSignedType undefNode
 cUnsigned = CTypeSpec $ CUnsigType undefNode
-cBool = CTypeSpec $ CBoolType undefNode
+cBool = cType "bool"
 \end{code}
 
 We also define \tt{struct}, \tt{union}, and \tt{enum} specifiers, e.g.,

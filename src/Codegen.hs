@@ -20,7 +20,7 @@ blockName id = "block" ++ show id
 threadName id = "thread" ++ show id ++ "_t"
 
 blockDecl (id,_,_,_) =
-  cFunDecl (blockName id) [([cType "thread_t"],[cPtr],"thread")] [cInt]
+  cFunDecl (blockName id) [([cType "thread_t"],[cPtr],"thread")] [cBool]
 
 --}}}
 --{{{ Grammar
@@ -48,7 +48,7 @@ translateThread (name, vars) =
         tydefName = sname ++ ";\nDECLARE_THREAD(" ++ sname ++ ")"
 
 translateBlock threads (id, thread, stmts, tail) =
-  cFunction (blockName id) [([cType "thread_t"],[cPtr],"thread")] [cInt]
+  cFunction (blockName id) [([cType "thread_t"],[cPtr],"thread")] [cBool]
   (cCompound (
       [Right $ cDecl [threadType] [cPtr] "priv" 
        (Just (cCast threadType [cPtr] (cVar "thread")))] ++
