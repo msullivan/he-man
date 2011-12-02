@@ -11,6 +11,8 @@ codegen (blocks, threads) =
   cFile (map translateThread threads ++ 
                   map (translateBlock threads) blocks)
 
+outputHeader = "#include \"mainloop.h\"\n#include \"lib.h\"\n"
+
 --{{{ Helpers
 
 hasVar vars x = isJust $ find (\(y, _) -> x == y) vars
@@ -22,8 +24,9 @@ threadName id = "thread" ++ show id
 --{{{ Grammar
 
 translateThread (name, vars) =
-  cTypedef (cStructType sname (map declVar vars)) [] tydefName
-  where declVar (x, t) = cDecl [translateType t] [] x Nothing
+  cTypedef (cStructType sname (threadDecl : map declVar vars)) [] tydefName
+  where threadDecl = cDecl [cType "thread_t"] [] "thread" Nothing
+        declVar (x, t) = cDecl [translateType t] [] x Nothing
         sname = threadName name
         -- This is a frumious hack to sneak in a toplevel invocation of
         -- DECLARE_THREAD
@@ -56,7 +59,7 @@ translateStmt vars stmt =
   case stmt of
     Decl (x, t) e ->
       if hasVar vars x then
-        Left $ cExpr (cAssign (cVar x) (transE e))
+        Left $ cExpr (cAssign (cArrow (cVar "thread_priv") x) (transE e))
       else
         Right $ cDecl [translateType t] [] x (Just $ transE e)
     Assign e1 e2 -> Left $ cExpr (cAssign (transE e1) (transE e2))
