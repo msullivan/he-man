@@ -25,6 +25,7 @@ data Expr = Call Prim [Expr]
           | NumLit Integer
           | StringLit String
           | Var Var
+          | CurThread
           deriving (Eq, Ord, Show)
 data ArithOp = Plus | Times | Minus | Div | Mod
              | And | Or | Xor

@@ -3,14 +3,19 @@ module Lib where
 import Lang
 import Sugar
 
+-- Coreish runtime functions
+mk_nb_event fd modes =
+  call (CFn "mk_nb_event") Int [CurThread, fd, modes]
+-- This is kind of lame
+new_buf size =
+  call (CFn "new_buf") Buffer [CurThread, size]
+
 -- Sugar for individual functions and whatnot
 socket domain typ protcol =
   call (CFn "socket") Int [domain, typ, protcol]
-make_nb fd = call (CFn "make_non_blocking") Int [fd]
-sock_bind fd family addr port =
-  call (CFn "bind") Int [fd, family, addr, port]
-reg_event fd modes =
-  call (CFn "reg_event") Int [fd, modes]
+make_nb fd = call (CFn "make_socket_non_blocking") Int [fd]
+sock_bind_v4 fd addr port =
+  call (CFn "sock_bind_v4") Int [fd, addr, port]
 sock_listen fd q_limit =
   call (CFn "listen") Int [fd, q_limit]
 sock_accept fd =
@@ -19,10 +24,8 @@ sock_read fd buf len =
   call (CFn "read") Int [fd, buf, len]
 sock_write fd buf len =
   call (CFn "write") Int [fd, buf, len]
-
--- This is kind of lame
-new_buf size =
-  call (CFn "new_buf") Buffer [size]
+close fd =
+  call (CFn "close") Int [fd]
 
 -- For debugging
 print_int n  =

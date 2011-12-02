@@ -34,11 +34,64 @@ static struct {
 
 // XXX: we want something faster than this
 // and maybe want to recover from failure
+bufp new_buf(thread_t *thread, int size) {
+	buf_t *buf = malloc(sizeof(buf_t) + size);
+	if (!buf) fail(1, "allocating buffer");
+	Q_INIT_ELEM(buf, q_link);
+	Q_INSERT_TAIL(&thread->bufs, buf, q_link);
+	return buf->buffer;
+}
+
+// XXX: we want something faster than this
+// and maybe want to recover from failure
 event_t *mk_event(void) {
 	event_t *e = calloc(1, sizeof(event_t));
-	if (!e) fail(1, "allocating thread");
+	if (!e) fail(1, "allocating event");
 	return e;
 }
+
+event_t *mk_nb_event(thread_t *thread, int fd, int mode)
+{
+	event_t *e = mk_event();
+	e->id = fd;
+
+	if (epoll_ctler(EPOLL_CTL_ADD, fd, mode|EPOLLET, e) < 0)
+		fail(1, "epoll_ctl");
+
+	Q_INSERT_TAIL(&thread->nb_events, e, q_link);
+
+	return e;
+}
+
+static void free_nb_event(event_t *event)
+{
+	epoll_ctler(EPOLL_CTL_DEL, event->id, 0, NULL);
+	close(event->id);
+	free(event);
+}
+
+static void free_buf(buf_t *buf)
+{
+	free(buf);
+}
+
+void free_thread(thread_t *thread)
+{
+	return;
+	event_t *e;
+	while ((e = Q_GET_HEAD(&thread->nb_events))) {
+		Q_REMOVE(&thread->nb_events, e, gc_link);
+		free_nb_event(e);
+	}
+	buf_t *buf;
+	while ((buf = Q_GET_HEAD(&thread->bufs))) {
+		Q_REMOVE(&thread->bufs, buf, q_link);
+		free_buf(buf);
+	}
+
+	free(thread);
+}
+
 
 void register_event(thread_t *thread, event_t *event)
 {
