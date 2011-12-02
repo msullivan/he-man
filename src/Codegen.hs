@@ -5,22 +5,21 @@ import Back
 import CLib
 import Data.List
 import Data.Maybe
-import qualified Text.PrettyPrint.HughesPJ
+
+codegen :: ([Block], [Thread]) -> CFile
+codegen (blocks, threads) =
+  cFile (concatMap translateThread threads ++ 
+                  map (translateBlock threads) blocks)
+
+--{{{ Helpers
 
 hasVar vars x = isJust $ find (\(y, _) -> x == y) vars
 
 blockName id = "block" ++ show id
 threadName id = "thread" ++ show id
 
-translateType t =
-  case t of
-    Int -> cInt
-    Bool -> cBool
-    -- TODO
-    String -> cType "string"
-    FD -> cType "FD"
-    Buffer -> cType "Buffer"
-    Event -> cType "Event"
+--}}}
+--{{{ Grammar
 
 translateExpr vars expr =
   case expr of
@@ -34,30 +33,6 @@ translateExpr vars expr =
     StringLit s -> cStrConst s
     CurThread -> cVar "thread"
   where trans = translateExpr vars
-
-translateArith op =
-  case op of
-    Plus -> cAdd
-    Times -> cMul
-    Minus -> cSub
-    Div -> cDiv
-    Mod -> cMod
-    And -> cLand
-    Or -> cLor
-    Xor -> cXor -- XXX bitwise!
-    Rsh -> cShr
-    Lsh -> cShl
-
-translateArithUnop op =
-  case op of
-    Negate -> cNeg
-    Not -> cLnot
-
-translateRelnOp op =
-  case op of
-    Eq -> cEq
-    Less -> cLt
-    Greater -> cGt
 
 translateStmt vars stmt =
   case stmt of
@@ -101,7 +76,41 @@ translateBlock threads (id, thread, stmts, tail) =
     where Just vars = lookup thread threads
           threadType = cType (threadName thread ++ "_p")
 
-translateProgram :: ([Block], [Thread]) -> Text.PrettyPrint.HughesPJ.Doc
-translateProgram (blocks, threads) =
-  pretty $ cFile (concatMap translateThread threads ++ 
-                  map (translateBlock threads) blocks)
+translateType t =
+  case t of
+    Int -> cInt
+    Bool -> cBool
+    -- TODO
+    String -> cType "string"
+    FD -> cType "FD"
+    Buffer -> cType "Buffer"
+    Event -> cType "Event"
+
+--}}}
+--{{{ Operators
+
+translateArith op =
+  case op of
+    Plus -> cAdd
+    Times -> cMul
+    Minus -> cSub
+    Div -> cDiv
+    Mod -> cMod
+    And -> cLand
+    Or -> cLor
+    Xor -> cXor -- XXX bitwise!
+    Rsh -> cShr
+    Lsh -> cShl
+
+translateArithUnop op =
+  case op of
+    Negate -> cNeg
+    Not -> cLnot
+
+translateRelnOp op =
+  case op of
+    Eq -> cEq
+    Less -> cLt
+    Greater -> cGt
+
+--}}}

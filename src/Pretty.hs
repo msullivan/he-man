@@ -5,6 +5,7 @@ import qualified Lang
 import Back
 import Text.PrettyPrint
 import Data.List
+import qualified Language.C
 
 commaSeparated docs = hcat $ intersperse comma docs
 block header body = header <> lbrace $$ nest 2 body $$ rbrace
@@ -16,6 +17,9 @@ class PP a where
 
 instance PP a => PP [a] where
   pretty xs = vcat $ map pretty xs
+
+instance PP (Language.C.CTranslationUnit Language.C.NodeInfo) where
+  pretty = Language.C.pretty
 
 --}}}
 --{{{ Front-end grammar

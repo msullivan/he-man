@@ -1,11 +1,11 @@
 module Echo where
 
 import Lang
-import Back
-import Pretty
 import Sugar
 import Lib
-import Codegen
+import Pretty (pretty)
+import Back (backend)
+import Codegen (codegen)
 
 q_limit = 1024
 port = 2023
@@ -41,18 +41,7 @@ main_loop = do
   while 1 $ do
     fd' <- accept fd e
     spawn child_code [fd']
-main_loop_code = compile main_loop
-main_loop_back = runPasses $ compile main_loop
 
--- Tests:
+main_loop_all = pretty $ codegen $ backend $ desugar main_loop
+main_loop_back = pretty $ fst . backend $ desugar main_loop
 
-testFront = pretty . compile
-testBack = pretty . fst . runPasses . compile
-
-front_code = do
-  (fd, e) <- setup_listener port
-  while 1 $ do
-    fd' <- accept fd e
-    spawn (declare_thread [] (\_ -> return ())) [fd']
-
-child = do spawn child_code []

@@ -5,8 +5,8 @@ import Control.Monad.RWS
 
 type Prog = RWS () [Stmt] Int
 
-compile :: Prog () -> Block
-compile prog = block
+desugar :: Prog () -> Block
+desugar prog = block
   where (_, block) = execRWS prog () 0
 
 -- Generate a fresh integer for use in naming things
@@ -74,9 +74,7 @@ ifE' e thenBody = ifE e thenBody (return ())
 (.&&) = Arith And
 (.||) = Arith Or
 
-
-
 -- Helper to construct a ThreadCode - kind of annoying
 declare_thread :: [VDecl] -> ([Expr] -> Prog ()) -> ThreadCode
-declare_thread decls f = (decls, compile prog)
+declare_thread decls f = (decls, desugar prog)
   where prog = f (map (Var . fst) decls)

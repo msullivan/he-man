@@ -25,6 +25,11 @@ data Tail = If Lang.Expr Tail Tail
           | Exit
           deriving (Eq, Ord, Show)
 
+backend :: Lang.Block -> ([Block],[Thread])
+backend = collectFrees . (mapFst optimizeJumps) . flattenPrgm
+
+mapFst f (x,y) = (f x,y)
+
 --{{{ flattenPrgm
 
 type Flattener = RWS ThreadName ([Block],[Thread]) Label
@@ -204,6 +209,7 @@ collectExpr e = case e of
   Lang.Constant _ -> return ()
   Lang.NumLit _ -> return ()
   Lang.StringLit _ -> return ()
+  Lang.CurThread -> return ()
 
 collectTail t = case t of
   If expr tail tail' ->
@@ -217,70 +223,67 @@ collectTail t = case t of
 --}}}
 --{{{ Tests
 
-mapFst f (x,y) = (f x,y)
-runPasses = collectFrees . (mapFst optimizeJumps) . flattenPrgm
+testFlat = backend [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
 
-testFlat = runPasses [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
+testIf = backend [Lang.Exp (Lang.NumLit 5),
+                  Lang.If (Lang.NumLit 6)
+                          [Lang.Exp $ Lang.Call (Lang.CFn "cfun") []]
+                          [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
+                  Lang.Exp (Lang.NumLit 10)]
 
-testIf = runPasses [Lang.Exp (Lang.NumLit 5),
-                    Lang.If (Lang.NumLit 6)
-                            [Lang.Exp $ Lang.Call (Lang.CFn "cfun") []]
-                            [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
-                    Lang.Exp (Lang.NumLit 10)]
+testWhile = backend [Lang.Exp (Lang.NumLit 5),
+                     Lang.While (Lang.NumLit 6)
+                                [Lang.Exp $ Lang.Call (Lang.CFn "rep") [],
+                                 Lang.Exp $ Lang.Call (Lang.CFn "rep2") []],
+                     Lang.Exp (Lang.NumLit 10)]
 
-testWhile = runPasses [Lang.Exp (Lang.NumLit 5),
-                       Lang.While (Lang.NumLit 6)
-                                  [Lang.Exp $ Lang.Call (Lang.CFn "rep") [],
-                                   Lang.Exp $ Lang.Call (Lang.CFn "rep2") []],
-                       Lang.Exp (Lang.NumLit 10)]
+testExit = backend [Lang.Exp (Lang.NumLit 5),
+                    Lang.Exit,
+                    Lang.Exp (Lang.NumLit 6)]
 
-testExit = runPasses [Lang.Exp (Lang.NumLit 5),
-                      Lang.Exit,
-                      Lang.Exp (Lang.NumLit 6)]
+testIfExit = backend [Lang.Exp (Lang.NumLit 5),
+                      Lang.If (Lang.NumLit 6)
+                              [Lang.Exit]
+                              [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
+                      Lang.Exp (Lang.NumLit 10)]
 
-testIfExit = runPasses [Lang.Exp (Lang.NumLit 5),
-                        Lang.If (Lang.NumLit 6)
+testWait = backend [Lang.Exp (Lang.NumLit 10),
+                    Lang.Wait (Lang.Call (Lang.CFn "wfun") []),
+                    Lang.Exp (Lang.NumLit 11)]
+
+testSpawn = backend [Lang.Exp (Lang.NumLit 5),
+                     Lang.Spawn ([("x",Lang.Int),("y",Lang.Bool)],
+                       [Lang.Exp (Lang.NumLit 10),
+                        Lang.Exp (Lang.NumLit 15)])
+                       [Lang.Var "arg1",Lang.Var "arg2"],
+                     Lang.Exp (Lang.NumLit 20)]
+
+testSpawnIf = backend [Lang.Exp (Lang.NumLit 5),
+                       Lang.Spawn ([("x",Lang.Int),("y",Lang.Bool)],
+                         [Lang.Exp (Lang.NumLit 0),
+                          Lang.If (Lang.NumLit 6)
+                                  [Lang.Exit]
+                                  [Lang.Exp $ Lang.NumLit 100],
+                          Lang.Exp (Lang.NumLit 1)])
+                         [Lang.Var "arg1",Lang.Var "arg2"],
+                       Lang.If (Lang.NumLit 7)
+                               [Lang.Exp $ Lang.Call (Lang.CFn "cfun") []]
+                               [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
+                       Lang.Exp (Lang.NumLit 8)]
+
+testOptimize = backend [Lang.If (Lang.NumLit 6)
                                 [Lang.Exit]
-                                [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
+                                [Lang.If (Lang.NumLit 7)
+                                         [Lang.Exp (Lang.NumLit 8)]
+                                         [Lang.Exp (Lang.NumLit 9)]],
                         Lang.Exp (Lang.NumLit 10)]
 
-testWait = runPasses [Lang.Exp (Lang.NumLit 10),
-                      Lang.Wait (Lang.Call (Lang.CFn "wfun") []),
-                      Lang.Exp (Lang.NumLit 11)]
-
-testSpawn = runPasses [Lang.Exp (Lang.NumLit 5),
-                       Lang.Spawn ([("x",Lang.Int),("y",Lang.Bool)],
-                         [Lang.Exp (Lang.NumLit 10),
-                          Lang.Exp (Lang.NumLit 15)])
-                         [Lang.Var "arg1",Lang.Var "arg2"],
-                       Lang.Exp (Lang.NumLit 20)]
-
-testSpawnIf = runPasses [Lang.Exp (Lang.NumLit 5),
-                         Lang.Spawn ([("x",Lang.Int),("y",Lang.Bool)],
-                           [Lang.Exp (Lang.NumLit 0),
-                            Lang.If (Lang.NumLit 6)
-                                    [Lang.Exit]
-                                    [Lang.Exp $ Lang.NumLit 100],
-                            Lang.Exp (Lang.NumLit 1)])
-                           [Lang.Var "arg1",Lang.Var "arg2"],
-                         Lang.If (Lang.NumLit 7)
-                                 [Lang.Exp $ Lang.Call (Lang.CFn "cfun") []]
-                                 [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
-                         Lang.Exp (Lang.NumLit 8)]
-
-testOptimize = runPasses [Lang.If (Lang.NumLit 6)
-                                  [Lang.Exit]
-                                  [Lang.If (Lang.NumLit 7)
-                                           [Lang.Exp (Lang.NumLit 8)]
-                                           [Lang.Exp (Lang.NumLit 9)]],
-                          Lang.Exp (Lang.NumLit 10)]
-
-testCollect = runPasses [Lang.Decl ("y",Lang.Int) (Lang.NumLit 2),
-                         Lang.Decl ("x",Lang.Int) (Lang.NumLit 2),
-                         Lang.Exp $
-                           Lang.Arith Lang.Plus (Lang.Var "y") (Lang.Var "x"),
-                         Lang.If (Lang.Var "y")
-                                 [Lang.Exit]
-                                 [Lang.Exp $ Lang.Var "y"]]
+testCollect = backend [Lang.Decl ("y",Lang.Int) (Lang.NumLit 2),
+                       Lang.Decl ("x",Lang.Int) (Lang.NumLit 2),
+                       Lang.Exp $
+                         Lang.Arith Lang.Plus (Lang.Var "y") (Lang.Var "x"),
+                       Lang.If (Lang.Var "y")
+                               [Lang.Exit]
+                               [Lang.Exp $ Lang.Var "y"]]
 
 --}}}

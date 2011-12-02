@@ -13,7 +13,11 @@ Using \tt{Language.C.Pretty.pretty}, we can pretty-print any C entity, although
 the main entity of interest is the file, or \tt{CTranslationUnit}, which is
 comprised of a list of \tt{CExternalDeclaration}s.
 \begin{code}
+type CFile = CTranslationUnit NodeInfo
+
+cFile :: [CExternalDeclaration NodeInfo] -> CFile
 cFile edecls = CTranslUnit edecls undefNode
+
 ident = internalIdent
 \end{code}
 
