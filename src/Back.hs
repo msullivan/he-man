@@ -5,7 +5,6 @@ import Control.Monad.RWS
 import Control.Monad.Writer
 import qualified Data.Set as Set
 import Data.Maybe
-import Debug.Trace
 
 type Prgm = [Block]
 
@@ -119,11 +118,9 @@ flattenStmt stmt bStmts aStmts tail =
 
 {- optimizeJumps removes unnecessary Gotos from the output of flattenPrgm. -}
 
--- TODO fuse small non-empty blocks
--- TODO eliminate blocks never jumped to (optimized If tail)
-
-optimizeJumps bs = map (redirect (traceShow ls ls)) bs'
+optimizeJumps bs = map (redirect ls) bs'
   where (bs',ls) = optimize bs []
+        redirect ls (x,vs,ss,tail) = (x,vs,ss,walk tail ls)
 
 optimize [] xs = ([],xs)
 optimize (b:bs) ls =
@@ -148,8 +145,6 @@ walk x xs = case (x,lookup x xs) of
   (_,Just x') -> walk x' xs
   (If e t t',Nothing) -> If e (walk t xs) (walk t' xs)
   (_,Nothing) -> x
-
-redirect ls (x,vs,ss,tail) = (x,vs,ss,walk tail ls)
 
 knownConstantExpr expr =
   case expr of
@@ -224,7 +219,6 @@ collectTail t = case t of
 
 mapFst f (x,y) = (f x,y)
 runPasses = collectFrees . (mapFst optimizeJumps) . flattenPrgm
---runPasses = flattenPrgm
 
 testFlat = runPasses [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
 

@@ -58,6 +58,7 @@ instance PP Lang.Expr where
     Lang.NumLit i -> integer i
     Lang.StringLit s -> doubleQuotes (text s)
     Lang.Var v -> text v
+    Lang.CurThread -> text "curThread"
 
 --}}}
 --{{{ Back-end grammar
