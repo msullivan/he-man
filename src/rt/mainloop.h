@@ -4,7 +4,7 @@
 #include <libaio.h>
 #include "variable_queue.h"
 
-static char *process_name;
+char *process_name;
 void fail(int status, char *fmt, ...);
 void fail2(int status, int err, char *fmt, ...);
 
@@ -12,6 +12,8 @@ Q_NEW_HEAD(event_queue_t, event_t);
 Q_NEW_HEAD(thread_queue_t, thread_t);
 
 typedef bool thread_cont(struct thread_t *thread);
+
+typedef char *bufp;
 
 typedef struct thread_t {
 	//work_item_t work_item;
@@ -29,8 +31,9 @@ typedef struct event_t {
 	bool complete;
 	thread_t *thread;
 } event_t;
+typedef event_t *eventp; // lol.
 
-event_t *mk_event(void);
+event_t *mk_nb_event(int fd, int mode);
 int epoll_ctler(int op, int fd, uint32_t events, void *ptr);
 void make_runnable(struct thread_t *t);
 void setup_main_loop(void);

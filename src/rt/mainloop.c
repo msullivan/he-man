@@ -36,7 +36,18 @@ static struct {
 // and maybe want to recover from failure
 event_t *mk_event(void) {
 	event_t *e = calloc(1, sizeof(event_t));
-	if (!e) fail(1, "allocating thread");
+	if (!e) fail(1, "allocating event");
+	return e;
+}
+
+event_t *mk_nb_event(int fd, int mode)
+{
+	event_t *e = mk_event();
+	e->id = fd;
+
+	if (epoll_ctler(EPOLL_CTL_ADD, fd, mode|EPOLLET, e) < 0)
+		fail(1, "epoll_ctl");
+
 	return e;
 }
 

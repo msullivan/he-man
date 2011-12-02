@@ -3,22 +3,7 @@
  * https://banu.com/blog/2/how-to-use-epoll-a-complete-example-in-c/
  * */
 
-#include <unistd.h>
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/param.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <sys/epoll.h>
-#include <time.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <arpa/inet.h>
-
+#include "lib.h"
 #include "mainloop.h"
 
 #define ECHO_PORT          (2002)
@@ -42,20 +27,6 @@ static echo_thread_t *mk_thread(void) {
 	if (!t) fail(1, "allocating thread");
 	t->thread.tid = next_tid++;
 	return t;
-}
-
-static int make_socket_non_blocking(int sfd)
-{
-	int flags, s;
-
-	flags = fcntl(sfd, F_GETFL, 0);
-	if (flags == -1) fail(1, "fcntl");
-
-	flags |= O_NONBLOCK;
-	s = fcntl (sfd, F_SETFL, flags);
-	if (s == -1) fail(1, "fcntl");
-
-	return 0;
 }
 
 bool read_state(struct thread_t *thread);
@@ -113,12 +84,7 @@ bool setup_thread(struct thread_t *thread)
 	echo_thread_t *e = (echo_thread_t *)thread;
 	make_socket_non_blocking(e->fd);
 
-	e->event = mk_event();
-	e->event->id = e->fd;
-	
-	if (epoll_ctler(EPOLL_CTL_ADD, e->fd,
-	                EPOLLIN|EPOLLOUT|EPOLLET, e->event) < 0)
-		fail(1, "epoll_ctl");
+	e->event = mk_nb_event(e->fd, EVENT_RDWR);
 
 	thread->cont = read_state;
 
@@ -150,29 +116,17 @@ bool accept_state(struct thread_t *thread)
 bool setup(struct thread_t *thread)
 {
 	echo_thread_t *e = (echo_thread_t *)thread;
-	struct sockaddr_in servaddr;
 
 	e->fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (e->fd < 0) fail(1, "socket");
 
 	make_socket_non_blocking(e->fd);
 
-	memset(&servaddr, 0, sizeof(servaddr));
-	servaddr.sin_family      = AF_INET;
-	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	servaddr.sin_port        = htons(port);
+	sock_bind_v4(e->fd, INADDR_ANY, port);
 	
-	if (bind(e->fd, (struct sockaddr *)&servaddr,
-	         sizeof(servaddr)) < 0)
-		fail(1, "bind");
-
 	if (listen(e->fd, Q_LIMIT) < 0) fail(1, "listen");
 
-	e->event = mk_event();
-	e->event->id = e->fd;
-
-	if (epoll_ctler(EPOLL_CTL_ADD, e->fd, EPOLLIN|EPOLLET, e->event) < 0)
-		fail(1, "epoll_ctl");
+	e->event = mk_nb_event(e->fd, EVENT_RD);
 
 	thread->cont = accept_state;
 	
