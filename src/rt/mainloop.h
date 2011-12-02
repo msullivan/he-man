@@ -4,6 +4,15 @@
 #include <libaio.h>
 #include "variable_queue.h"
 
+#define DECLARE_THREAD(thread_name) \
+    struct thread_name *mk_ ## thread_name(void) { \
+        static int next_tid = 0; \
+        struct thread_name *t = calloc(1, sizeof(struct thread_name)); \
+        if (!t) fail(1, "allocating thread"); \
+        t->thread.tid = next_tid++; \
+        return t; \
+    }
+
 char *process_name;
 void fail(int status, char *fmt, ...);
 void fail2(int status, int err, char *fmt, ...);

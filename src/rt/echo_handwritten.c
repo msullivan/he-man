@@ -12,7 +12,7 @@
 
 static int port = ECHO_PORT;
 
-typedef struct echo_thread_t {
+typedef struct echo_thread {
 	thread_t thread;
 	int fd;
 	event_t *event;
@@ -21,13 +21,7 @@ typedef struct echo_thread_t {
 	// stuff
 } echo_thread_t;
 
-static echo_thread_t *mk_thread(void) {
-	static int next_tid = 0;
-	echo_thread_t *t = calloc(1, sizeof(echo_thread_t));
-	if (!t) fail(1, "allocating thread");
-	t->thread.tid = next_tid++;
-	return t;
-}
+DECLARE_THREAD(echo_thread)
 
 bool read_state(struct thread_t *thread);
 
@@ -104,7 +98,7 @@ bool accept_state(struct thread_t *thread)
 	} else if (fd < 0) fail(1, "accept");
 
 	// Setup a new thread
-	echo_thread_t *new_thread = mk_thread();
+	echo_thread_t *new_thread = mk_echo_thread();
 	new_thread->fd = fd;
 	new_thread->thread.cont = setup_thread;
 	make_runnable(&new_thread->thread);
@@ -141,7 +135,7 @@ int main(int argc, char *argv[])
 
 	if (argc == 2) port = atoi(argv[1]);
 	
-	echo_thread_t *main_thread = mk_thread();
+	echo_thread_t *main_thread = mk_echo_thread();
 	main_thread->thread.cont = setup;
 	make_runnable(&main_thread->thread);
 
