@@ -6,9 +6,10 @@
 #include <libaio.h>
 #include "variable_queue.h"
 
+extern int next_tid;
+
 #define DECLARE_THREAD(thread_name) \
     struct thread_name *mk_ ## thread_name(void) { \
-        static int next_tid = 0; \
         struct thread_name *t = calloc(1, sizeof(struct thread_name)); \
         if (!t) fail(1, "allocating thread"); \
         t->thread.tid = next_tid++; \

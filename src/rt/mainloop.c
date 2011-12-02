@@ -22,6 +22,8 @@
 #define MAX_AIO_EVENTS 100 // dunno what this should be...
 #define MAX_ITERS 50
 
+int next_tid = 0;
+
 static struct {
 	bool expect_aio;
 	int epoll_fd;
