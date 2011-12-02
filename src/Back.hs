@@ -32,12 +32,9 @@ type Flattener = RWS ThreadName ([Block],[Thread]) Label
 flattenPrgm stmts = ((0,0,s,t):blocks,(0,[]):thds) where
   ((s,t),_,(blocks,thds)) = runRWS (flattenStmts stmts [] Exit) 0 1
   
--- This is a frumious hack. register_event needs to take the current
--- thread as an argument. We take advantage of the codegen implementation
--- detail that the current thread variable will be named "thread".
 registerEvent event = [Lang.Exp $
                        Lang.Call (Lang.CFn "register_event")
-                       [Lang.Var "thread", event]]
+                       [Lang.CurThread, event]]
 
 fresh = do
   x <- get

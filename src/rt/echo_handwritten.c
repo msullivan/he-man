@@ -43,7 +43,7 @@ bool write_state(struct thread_t *thread)
 		register_event(thread, e->event);
 		return false;
 	} else if (count <= 0) {
-		// XXX: cleanup!
+		free_thread(thread);
 		return false;
 	}
 
@@ -68,7 +68,7 @@ bool read_state(struct thread_t *thread)
 		register_event(thread, e->event);
 		return false;
 	} else if (count <= 0) {
-		// XXX: cleanup!
+		free_thread(thread);
 		return false;
 	}
 
@@ -84,7 +84,7 @@ bool setup_thread(struct thread_t *thread)
 	echo_thread_t *e = (echo_thread_t *)thread;
 	make_socket_non_blocking(e->fd);
 
-	e->event = mk_nb_event(e->fd, EVENT_RDWR);
+	e->event = mk_nb_event(thread, e->fd, EVENT_RDWR);
 
 	thread->cont = read_state;
 
@@ -126,7 +126,7 @@ bool setup(struct thread_t *thread)
 	
 	if (listen(e->fd, Q_LIMIT) < 0) fail(1, "listen");
 
-	e->event = mk_nb_event(e->fd, EVENT_RD);
+	e->event = mk_nb_event(thread, e->fd, EVENT_RD);
 
 	thread->cont = accept_state;
 	
