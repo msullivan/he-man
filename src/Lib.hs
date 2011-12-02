@@ -43,21 +43,23 @@ kEVENT_WR = Constant "EVENT_WR"
 kEVENT_RDWR = Constant "EVENT_RDWR"
 
 
-do_nb_action :: Expr -> Prog Expr -> Prog Expr
-do_nb_action e action = do
-  res <- action
+do_nb_action :: Expr -> Prog Expr -> String -> Prog Expr
+do_nb_action e action name = do
+  res <- var name Int =<< action
   ifE' (res .< 0) $ do
     while (res .< 0) $ do
       wait e
       res .=. action
   return res
 
-accept fd e = do_nb_action e (sock_accept fd)
-do_read fd e buf size = do_nb_action e (sock_read fd buf size)
-do_write fd e buf size = do_nb_action e (sock_write fd buf size)
+accept fd e = do_nb_action e (sock_accept fd) "accepted_fd"
+do_read fd e buf size =
+          do_nb_action e (sock_read fd buf size) "amt_read"
+do_write fd e buf size =
+           do_nb_action e (sock_write fd buf size) "amt_written"
 
 full_write fd e buf size = do
-  amt_written <- var "amt_written" Int 0
+  amt_written <- var "total_written" Int 0
   failed <- var "write_failed" Int 0
   while (amt_written .< size .&& failed .== 0) $ do
     amt <- do_write fd e (buf + amt_written) (size - amt_written)
