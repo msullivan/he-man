@@ -101,8 +101,11 @@ list of declarations. Declaring a named \tt{enum} type requires an identifier
 and a list of pairs of an identifier and an optional expression corresponding to
 its enumeration constant.
 \begin{code}
-cStructDecl id decls = typeDecl [] $ structUnion CStructTag id (Just decls)
-cUnionDecl id decls = typeDecl [] $ structUnion CUnionTag id (Just decls)
+cStructType id decls = structUnion CStructTag id (Just decls)
+cUnionType id decls = structUnion CUnionTag id (Just decls)
+
+cStructDecl id decls = typeDecl [] $ cStructType id decls
+cUnionDecl id decls = typeDecl [] $ cUnionType id decls
 cEnumDecl id idExprMs = typeDecl [] $ enum id (Just ls)
   where ls = map (\(id,expr) -> (ident id,expr)) idExprMs
 
@@ -197,7 +200,9 @@ cStrConst x = CConst $ CStrConst (cString x) undefNode
 and a variety of other constructs. Below, \tt{typ} arguments are
 \tt{CDeclarationSpecifier}s, and \tt{id}s are \tt{String}s.
 \begin{code}
-cCast typ expr = CCast (CDecl [typ] [] undefNode) expr undefNode -- (typ) expr
+cCast typ indirs expr = CCast (CDecl [typ] declrs undefNode)     -- (typ) expr
+  expr undefNode where
+  declrs = [(Just $ CDeclr Nothing indirs Nothing [] undefNode,Nothing,Nothing)]
 cSizeofExpr expr = CSizeofExpr expr undefNode                    -- sizeof(expr)
 cSizeofType typ = CSizeofType(CDecl [typ] [] undefNode) undefNode -- sizeof(typ)
 
@@ -323,7 +328,7 @@ test5 = pretty $ cFile
                Right $ cDecl [cInt] [cArray $ Just $ cIntConst 5] "b" Nothing,
                Right $ cDecl [cInt] [cPtr] "c" (Just $ cIntConst 0),
                Right $ cDecl [cInt] [cPtr] "c" (Just $ cVar "null"),
-               Left $ cExpr $ cCast cInt (cIntConst 0),
+               Left $ cExpr $ cCast cInt [cPtr] (cIntConst 0),
                Left $ cExpr $ cSizeofType cInt])]
 \end{code}
 % }}}

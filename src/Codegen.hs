@@ -8,7 +8,7 @@ import Data.Maybe
 
 codegen :: ([Block], [Thread]) -> CFile
 codegen (blocks, threads) =
-  cFile (concatMap translateThread threads ++ 
+  cFile (map translateThread threads ++ 
                   map (translateBlock threads) blocks)
 
 --{{{ Helpers
@@ -20,6 +20,21 @@ threadName id = "thread" ++ show id
 
 --}}}
 --{{{ Grammar
+
+translateThread (name, vars) =
+  cTypedef (cStructType sname (map declVar vars)) [] sname
+  where declVar (x, t) = cDecl [translateType t] [] x Nothing
+        sname = threadName name ++ "_t"
+
+translateBlock threads (id, thread, stmts, tail) =
+  cFunction (blockName id) [([cType "thread_t"],[cPtr],"thread")] [cInt]
+  (cCompound (
+      [Right $ cDecl [threadType] [] "thread_priv" 
+       (Just (cCast threadType [cPtr] (cVar "thread")))] ++
+      map (translateStmt vars) stmts ++
+      translateTail vars tail))
+    where Just vars = lookup thread threads
+          threadType = cType (threadName thread ++ "_t")
 
 translateExpr vars expr =
   case expr of
@@ -43,6 +58,7 @@ translateStmt vars stmt =
         Right $ cDecl [translateType t] [] x (Just $ transE e)
     Assign e1 e2 -> Left $ cExpr (cAssign (transE e1) (transE e2))
     Exp e -> Left $ cExpr $ transE e
+    Spawn thd _ -> Left $ cExpr $ cCall (cVar $ "mk_" ++ threadName thd) []
     -- TODO Spawn
     where transE = translateExpr vars
 
@@ -60,31 +76,15 @@ translateTail vars tail =
                                       (cArrow (cVar "thread") "cont")
                                       (cVar (blockName target)))
 
-translateThread (name, vars) =
-  [cStructDecl sname (map declVar vars),
-   cTypedef (cStruct sname) [cPtr] (sname ++ "_p")]
-  where declVar (x, t) = cDecl [translateType t] [] x Nothing
-        sname = threadName name
-
-translateBlock threads (id, thread, stmts, tail) =
-  cFunction (blockName id) [([cType "thread"],[cPtr],"thread")] [cInt]
-  (cCompound (
-      [Right $ cDecl [threadType] [] "thread_priv" 
-       (Just (cCast threadType (cVar "thread")))] ++
-      map (translateStmt vars) stmts ++
-      translateTail vars tail))
-    where Just vars = lookup thread threads
-          threadType = cType (threadName thread ++ "_p")
-
 translateType t =
   case t of
     Int -> cInt
     Bool -> cBool
+    FD -> cInt
+    Event -> cType "event_t"
     -- TODO
     String -> cType "string"
-    FD -> cType "FD"
     Buffer -> cType "Buffer"
-    Event -> cType "Event"
 
 --}}}
 --{{{ Operators
