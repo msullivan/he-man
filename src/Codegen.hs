@@ -22,9 +22,12 @@ threadName id = "thread" ++ show id
 --{{{ Grammar
 
 translateThread (name, vars) =
-  cTypedef (cStructType sname (map declVar vars)) [] sname
+  cTypedef (cStructType sname (map declVar vars)) [] tydefName
   where declVar (x, t) = cDecl [translateType t] [] x Nothing
         sname = threadName name ++ "_t"
+        -- This is a frumious hack to sneak in a toplevel invocation of
+        -- DECLARE_THREAD
+        tydefName = sname ++ "; DECLARE_THREAD(" ++ sname ++ ")"
 
 translateBlock threads (id, thread, stmts, tail) =
   cFunction (blockName id) [([cType "thread_t"],[cPtr],"thread")] [cInt]
@@ -64,7 +67,7 @@ translateStmt vars stmt =
 
 translateTail vars tail =
   case tail of
-    Exit -> [return 0] -- TODO cleanup
+    Exit -> [cleanup, return 0]
     Goto target -> [jump target, return 1]
     GotoWait target -> [jump target, return 0]
     If e t1 t2 -> [Left $
@@ -75,6 +78,7 @@ translateTail vars tail =
           jump target = Left $ cExpr (cAssign
                                       (cArrow (cVar "thread") "cont")
                                       (cVar (blockName target)))
+          cleanup = Left $ cExpr (cCall (cVar "free_thread") [cVar "thread"])
 
 translateType t =
   case t of

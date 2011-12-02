@@ -21,7 +21,7 @@ typedef struct echo_thread {
 	// stuff
 } echo_thread_t;
 
-DECLARE_THREAD(echo_thread)
+DECLARE_THREAD(echo_thread);
 
 bool read_state(struct thread_t *thread);
 
