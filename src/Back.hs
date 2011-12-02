@@ -5,6 +5,7 @@ import Control.Monad.RWS
 import Control.Monad.Writer
 import qualified Data.Set as Set
 import Data.Maybe
+import Debug.Trace
 
 type Prgm = [Block]
 
@@ -82,29 +83,30 @@ flattenStmt stmt bStmts aStmts tail =
     Lang.If expr cs as -> 
       do seqL <- fresh
          newBlock seqL aStmts tail
-         (bs,_) <- flattenStmts bStmts [] tail
+         (conL,altL) <- fresh2
+         (bs,tail') <- flattenStmts bStmts [] (If expr (Goto conL) (Goto altL))
          (cs',conT) <- flattenStmts cs [] (Goto seqL)
          (as',altT) <- flattenStmts as [] (Goto seqL)
-         (conL,altL) <- fresh2
          newBlock conL cs' conT
          newBlock altL as' altT
-         return (bs,If expr (Goto conL) (Goto altL))
+         return (bs,tail')
     Lang.While expr ss ->
       do (seqL,whileL) <- fresh2
          newBlock seqL aStmts tail
          let whileT = If expr (Goto whileL) (Goto seqL)
-         (bs,_) <- flattenStmts bStmts [] whileT
+         (bs,tail') <- flattenStmts bStmts [] whileT
          (ws,whileT') <- flattenStmts ss [] whileT
          newBlock whileL ws whileT'
-         return (bs,whileT)
+         return (bs,tail')
     Lang.Exit ->
-      do (bs, tail) <- flattenStmts bStmts [] Exit
-         return (bs, tail)
+      do (bs, tail') <- flattenStmts bStmts [] Exit
+         return (bs, tail')
     Lang.Wait expr ->
       do seqL <- fresh
          newBlock seqL aStmts tail
-         (bs,_) <- flattenStmts (bStmts ++ (registerEvent expr)) [] tail
-         return (bs,GotoWait seqL)
+         let waitT = GotoWait seqL
+         (bs,tail') <- flattenStmts (bStmts ++ (registerEvent expr)) [] waitT
+         return (bs,tail')
     Lang.Spawn (vs,ss) args ->
       do threadL <- fresh
          let spawn = Spawn threadL (zip vs args)
@@ -123,7 +125,7 @@ flattenStmt stmt bStmts aStmts tail =
 -- TODO fuse small non-empty blocks
 -- TODO eliminate blocks never jumped to (optimized If tail)
 
-optimizeJumps bs = map (redirect ls) bs'
+optimizeJumps bs = map (redirect (traceShow ls ls)) bs'
   where (bs',ls) = optimize bs []
 
 optimize [] xs = ([],xs)
@@ -133,30 +135,24 @@ optimize (b:bs) ls =
   (label,vs,[],_) | Goto label `elem` targets ->
     let (bs',ls') = optimize bs ls in (b:bs',ls')
   (label,vs,[],Goto g) ->
-    let (bs',ls') = optimize bs ((Goto label,walk (Goto g) ls):ls) in (bs',ls')
+    optimize bs ((Goto label,walk (Goto g) ls):ls)
   (label,vs,[],Exit) ->
     optimize bs ((Goto label,Exit):ls)
   (label,vs,stmts,If (Lang.NumLit 0) c a) ->
     optimize ((label,vs,stmts,a):bs) ls
   (label,vs,stmts,If e c a) | knownConstantExpr e ->
     optimize ((label,vs,stmts,c):bs) ls
-  (label,vs,[],If e (Goto g) (Goto g')) ->
-    let tail = walk (Goto g) ls
-        tail' = walk (Goto g') ls
-        (bs',ls') = optimize bs ((Goto label,If e tail tail'):ls) in
-    ((label,vs,[],If e tail tail'):bs',ls')
+  (label,vs,[],If e t t') ->
+    optimize bs ((Goto label,walk (If e t t') ls):ls)
   _ -> let (bs',ls') = optimize bs ls in (b:bs',ls')
 
-walk x xs = case lookup x xs of
-  Just x' -> walk x' xs
-  Nothing -> x
+walk x xs = case (x,lookup x xs) of
+  (_,Just (If e t t')) -> walk (If e (walk t xs) (walk t' xs)) xs
+  (_,Just x') -> walk x' xs
+  (If e t t',Nothing) -> If e (walk t xs) (walk t' xs)
+  (_,Nothing) -> x
 
-redirect ls (x,vs,ss,tail) = (x,vs,ss,help tail) where
-  help tail = case tail of
-    Goto x -> walk (Goto x) ls
-    GotoWait x -> GotoWait x
-    If e t t' -> If e (help t) (help t')
-    Exit -> Exit
+redirect ls (x,vs,ss,tail) = (x,vs,ss,walk tail ls)
 
 knownConstantExpr expr =
   case expr of
@@ -231,6 +227,7 @@ collectTail t = case t of
 
 mapFst f (x,y) = (f x,y)
 runPasses = collectFrees . (mapFst optimizeJumps) . flattenPrgm
+--runPasses = flattenPrgm
 
 testFlat = runPasses [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
 

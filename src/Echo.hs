@@ -43,4 +43,16 @@ main_loop = do
     spawn child_code [fd']
 main_loop_code = compile main_loop
 main_loop_back = runPasses $ compile main_loop
-testPretty = pretty $ fst main_loop_back
+
+-- Tests:
+
+testFront = pretty . compile
+testBack = pretty . fst . runPasses . compile
+
+front_code = do
+  (fd, e) <- setup_listener port
+  while 1 $ do
+    fd' <- accept fd e
+    spawn (declare_thread [] (\_ -> return ())) [fd']
+
+child = do spawn child_code []
