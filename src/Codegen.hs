@@ -26,7 +26,7 @@ threadName id = "thread" ++ show id ++ "_t"
 translateThread (name, vars) =
   cTypedef (cStructType sname (threadDecl : map declVar vars)) [] tydefName
   where threadDecl = cDecl [cType "thread_t"] [] "thread" Nothing
-        declVar (x, t) = cDecl [translateType t] [] x Nothing
+        declVar (x, t) = cDecl [typ] indirs x Nothing where (typ,indirs) = translateType t
         sname = threadName name
         -- This is a frumious hack to sneak in a toplevel invocation of
         -- DECLARE_THREAD
@@ -61,7 +61,8 @@ translateStmt vars stmt =
       if hasVar vars x then
         [Left $ cExpr (cAssign (cArrow (cVar "priv") x) (transE e))]
       else
-        [Right $ cDecl [translateType t] [] x (Just $ transE e)]
+        let (typ,indirs) = translateType t in
+        [Right $ cDecl [typ] indirs x (Just $ transE e)]
     Assign e1 e2 -> [Left $ cExpr (cAssign (transE e1) (transE e2))]
     Exp e -> [Left $ cExpr $ transE e]
     Spawn thd args -> makeT:setupTVars ++ setupTRun where
@@ -94,13 +95,12 @@ translateTail vars tail =
 
 translateType t =
   case t of
-    Int -> cInt
-    Bool -> cBool
-    FD -> cInt
-    Event -> cType "eventp"
-    -- TODO
-    String -> cType "string"
-    Buffer -> cType "bufp"
+    Int -> (cInt,[])
+    Bool -> (cBool,[])
+    FD -> (cInt,[])
+    Event -> (cType "event_t",[cPtr])
+    String -> (cType "string",[]) --TODO
+    Buffer -> (cChar,[cPtr])
 
 --}}}
 --{{{ Operators

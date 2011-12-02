@@ -25,8 +25,6 @@ Q_NEW_HEAD(buf_queue_t, buf_t);
 
 typedef bool thread_cont(struct thread_t *thread);
 
-typedef char *bufp;
-
 typedef struct buf_t {
 	Q_NEW_LINK(buf_t) q_link;
 	char buffer[];
@@ -51,9 +49,8 @@ typedef struct event_t {
 	bool complete;
 	thread_t *thread;
 } event_t;
-typedef event_t *eventp; // lol.
 
-bufp new_buf(thread_t *t, int size);
+char *new_buf(thread_t *t, int size);
 event_t *mk_nb_event(thread_t *t, int fd, int mode);
 int epoll_ctler(int op, int fd, uint32_t events, void *ptr);
 void make_runnable(struct thread_t *t);

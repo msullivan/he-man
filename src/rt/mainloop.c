@@ -34,7 +34,7 @@ static struct {
 
 // XXX: we want something faster than this
 // and maybe want to recover from failure
-bufp new_buf(thread_t *thread, int size) {
+char *new_buf(thread_t *thread, int size) {
 	buf_t *buf = malloc(sizeof(buf_t) + size);
 	if (!buf) fail(1, "allocating buffer");
 	Q_INIT_ELEM(buf, q_link);
