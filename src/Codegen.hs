@@ -63,9 +63,12 @@ translateTail vars tail =
 
 translateThread (name, vars) =
   [cStructDecl sname (map declVar vars),
-   cTypedef (cStruct sname) [cPtr] (sname ++ "_p")]
+   cTypedef (cStruct sname) [cPtr] tydef_name]
   where declVar (x, t) = cDecl [translateType t] [] x Nothing
         sname = threadName name
+        -- This is a frumious hack to sneak in a toplevel invocation of
+        -- DECLARE_THREAD
+        tydef_name = sname ++ "_p; DECLARE_THREAD(" ++ sname ++ ")"
 
 translateBlock threads (id, thread, stmts, tail) =
   cFunction (blockName id) [([cType "thread"],[cPtr],"thread")] [cInt]
