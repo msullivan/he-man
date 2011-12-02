@@ -123,7 +123,6 @@ static void handle_event(event_t *event)
 	if (!t) return;
 
 	// Indicate what event finished
-	assert(!t->finished_event);
 	t->finished_event = event;
 
 	// Clear out other events we are waiting on
