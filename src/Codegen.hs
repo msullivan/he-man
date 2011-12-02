@@ -32,6 +32,7 @@ translateExpr vars expr =
     Constant s -> cVar s
     NumLit n -> cIntConst n
     StringLit s -> cStrConst s
+    CurThread -> cVar "thread"
   where trans = translateExpr vars
 
 translateArith op =
@@ -72,7 +73,7 @@ translateStmt vars stmt =
 
 translateTail vars tail =
   case tail of
-    Exit -> [return 0]
+    Exit -> [return 0] -- TODO cleanup
     Goto target -> [jump target, return 1]
     GotoWait target -> [jump target, return 0]
     If e t1 t2 -> [Left $
