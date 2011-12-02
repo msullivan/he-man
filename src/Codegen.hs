@@ -48,7 +48,7 @@ translateStmt vars stmt =
 
 translateTail vars tail =
   case tail of
-    Exit -> [return 0] -- TODO cleanup
+    Exit -> [cleanup, return 0]
     Goto target -> [jump target, return 1]
     GotoWait target -> [jump target, return 0]
     If e t1 t2 -> [Left $
@@ -59,6 +59,7 @@ translateTail vars tail =
           jump target = Left $ cExpr (cAssign
                                       (cArrow (cVar "thread") "cont")
                                       (cVar (blockName target)))
+          cleanup = Left $ cExpr (cCall (cVar "free_thread") [cVar "thread"])
 
 translateThread (name, vars) =
   [cStructDecl sname (map declVar vars),
