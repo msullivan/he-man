@@ -6,27 +6,42 @@ import CLib
 import Data.List
 import Data.Maybe
 
-codegen :: ([Block], [Thread]) -> CFile
-codegen (blocks, threads) =
-  cFile (map translateThread threads ++ 
-                  map (translateBlock threads) blocks)
-
-outputHeader = "#include \"mainloop.h\"\n#include \"lib.h\"\n"
+codegen :: ([Block], [Thread]) -> String
+codegen (blocks, threads) = outputHeader ++
+  (show $ pretty $ translatePrgm (blocks, threads))
 
 --{{{ Helpers
+
+outputHeader = "#include \"mainloop.h\"\n#include \"lib.h\"\n"
 
 hasVar vars x = isJust $ find (\(y, _) -> x == y) vars
 
 blockName id = "block" ++ show id
 threadName id = "thread" ++ show id ++ "_t"
 
+blockDecl (id,_,_,_) =
+  cFunDecl (blockName id) [([cType "thread_t"],[cPtr],"thread")] [cInt]
+
 --}}}
 --{{{ Grammar
+
+translatePrgm :: ([Block], [Thread]) -> CFile
+translatePrgm (blocks, threads) =
+  cFile (map translateThread threads ++ 
+         map blockDecl blocks ++
+         [main] ++
+         map (translateBlock threads) blocks)
+  where main = cFunction "main" [] [cInt] $ cCompound
+                 ((translateStmt [] $ Spawn 0 []) ++
+                  [Left $ cExpr $ cCall (cVar "setup_main_loop") [],
+                   Left $ cExpr $ cCall (cVar "main_loop") [],
+                   Left $ cReturn $ cIntConst 0])
 
 translateThread (name, vars) =
   cTypedef (cStructType sname (threadDecl : map declVar vars)) [] tydefName
   where threadDecl = cDecl [cType "thread_t"] [] "thread" Nothing
-        declVar (x, t) = cDecl [typ] indirs x Nothing where (typ,indirs) = translateType t
+        declVar (x, t) = cDecl [typ] indirs x Nothing
+          where (typ,indirs) = translateType t
         sname = threadName name
         -- This is a frumious hack to sneak in a toplevel invocation of
         -- DECLARE_THREAD

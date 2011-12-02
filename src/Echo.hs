@@ -42,6 +42,9 @@ main_loop = do
     fd' <- accept fd e
     spawn child_code [fd']
 
-main_loop_all = pretty $ codegen $ backend $ desugar main_loop
+compile file p = do
+  writeFile file (codegen $ backend $ desugar p)
+
+main_loop_all = codegen $ backend $ desugar main_loop
 main_loop_back = pretty $ fst . backend $ desugar main_loop
 
