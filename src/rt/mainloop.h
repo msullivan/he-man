@@ -1,6 +1,8 @@
 #ifndef MAINLOOP_H
 #define MAINLOOP_H
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <libaio.h>
 #include "variable_queue.h"
 
