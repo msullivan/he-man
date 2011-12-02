@@ -137,7 +137,7 @@ optimize (b:bs) ls =
   (label,vs,[],Exit) ->
     optimize bs ((Goto label,Exit):ls)
   (label,vs,stmts,If (Lang.NumLit 0) c a) ->
-    optimize ((label,vs,stmts,c):bs) ls
+    optimize ((label,vs,stmts,a):bs) ls
   (label,vs,stmts,If e c a) | knownConstantExpr e ->
     optimize ((label,vs,stmts,c):bs) ls
   (label,vs,[],If e (Goto g) (Goto g')) ->
