@@ -68,6 +68,10 @@ ifE e thenBody elseBody = do
 ifE' :: Expr -> Prog a -> Prog ()
 ifE' e thenBody = ifE e thenBody (return ())
 
+infixr 2 .||
+infixr 3 .&&
+infix  4 .==, .<, .> --, ./=, .<=, .>=
+
 (.<) = RelnOp Less
 (.>) = RelnOp Greater
 (.==) = RelnOp Eq
