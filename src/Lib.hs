@@ -19,7 +19,7 @@ sock_bind_v4 fd addr port =
 sock_listen fd q_limit =
   call (CFn "listen") Int [fd, q_limit]
 sock_accept fd =
-  call (CFn "accept") Int [fd]
+  call (CFn "accept") Int [fd, 0, 0]
 sock_read fd buf len =
   call (CFn "read") Int [fd, buf, len]
 sock_write fd buf len =
