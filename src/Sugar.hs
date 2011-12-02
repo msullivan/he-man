@@ -45,8 +45,12 @@ exit = add Exit
 wait :: Expr -> Prog ()
 wait = add . Wait
 
+callName :: String -> Prim -> Type -> [Expr] -> Prog Expr
+callName name fn t args = var name t (Call fn args)
+
 call :: Prim -> Type -> [Expr] -> Prog Expr
-call fn t args = var "tmp" t (Call fn args)
+call fn t args = callName "tmp" fn t args
+
 
 spawn :: ThreadCode -> [Expr] -> Prog ()
 spawn thread args = add $ Spawn thread args
