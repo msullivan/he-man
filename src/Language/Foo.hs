@@ -1,16 +1,15 @@
 module Language.Foo
-  (module Language.Foo.Lib,
-   module Language.Foo.Sugar,
-   module Language.Foo.Lang,
+  (module Language.Foo.Syntax,
+   module Language.Foo.Lib,
    compile,
    testFront, testBack, testAll)
   where
 
-import Language.Foo.Lang
+import Language.Foo.Syntax
 import Language.Foo.Lib
-import Language.Foo.Sugar -- (desugar)
-import Language.Foo.Back (backend)
-import Language.Foo.Codegen (codegen)
+
+import Language.Foo.Backend
+import Language.Foo.Codegen
 import Language.Foo.Pretty
 
 compile file p = do writeFile file (codegen $ backend $ desugar p)
