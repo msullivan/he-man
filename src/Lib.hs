@@ -26,11 +26,20 @@ sock_write fd buf len =
   callName "amt_written" (CFn "write") Int [fd, buf, len]
 close fd =
   call (CFn "close") Int [fd]
+open path flags =
+  call (CFn "open") Int [path, flags]
+
+file_read fd buf len =
+  callName "amt_read" (CFn "read") Int [fd, buf, len]
+file_write fd buf len =
+  callName "amt_written" (CFn "write") Int [fd, buf, len]
+
 
 -- For debugging
 print_int n  =
   call (CFn "print_int") Int [n]
 
+errno = Var "errno" -- weeeee
 
 -- TODO: a bunch more
 
@@ -42,6 +51,10 @@ kEVENT_RD = Constant "EVENT_RD"
 kEVENT_WR = Constant "EVENT_WR"
 kEVENT_RDWR = Constant "EVENT_RDWR"
 
+kO_RDONLY = Constant "O_RDONLY"
+
+kEAGAIN = Constant "EAGAIN"
+
 
 do_nb_action :: Expr -> Prog Expr -> Prog Expr
 do_nb_action e action = do
@@ -52,15 +65,15 @@ do_nb_action e action = do
       res .=. action
   return res
 
-accept fd e = do_nb_action e (sock_accept fd)
-do_read fd e buf size = do_nb_action e (sock_read fd buf size)
-do_write fd e buf size = do_nb_action e (sock_write fd buf size)
+accept (fd, e) = do_nb_action e (sock_accept fd)
+do_read (fd, e) buf size = do_nb_action e (sock_read fd buf size)
+do_write (fd, e) buf size = do_nb_action e (sock_write fd buf size)
 
-full_write fd e buf size = do
+full_write ev buf size = do
   amt_written <- var "total_written" Int 0
   failed <- var "write_failed" Int 0
   while (amt_written .< size .&& failed .== 0) $ do
-    amt <- do_write fd e (buf + amt_written) (size - amt_written)
+    amt <- do_write ev (buf + amt_written) (size - amt_written)
     amt_written .= amt_written + amt
     ifE' (amt .== 0) $ do failed .= 1
   return amt_written
