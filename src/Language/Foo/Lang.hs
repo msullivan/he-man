@@ -1,4 +1,4 @@
-module Lang where
+module Language.Foo.Lang where
 
 type Block = [Stmt]
 type Var = String

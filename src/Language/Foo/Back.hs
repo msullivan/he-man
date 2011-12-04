@@ -1,6 +1,6 @@
-module Back where
+module Language.Foo.Back where
 
-import qualified Lang
+import qualified Language.Foo.Lang as Lang
 import Control.Monad.RWS
 import Control.Monad.Writer
 import qualified Data.Set as Set

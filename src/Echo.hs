@@ -1,11 +1,6 @@
 module Echo where
 
-import Lang
-import Sugar
-import Lib
-import Pretty (pretty)
-import Back (backend)
-import Codegen (codegen)
+import Language.Foo
 
 q_limit = 1024
 port = 2023
@@ -41,10 +36,4 @@ main_loop = do
   while 1 $ do
     fd' <- accept fd e
     spawn child_code [fd']
-
-compile file p = do
-  writeFile file (codegen $ backend $ desugar p)
-
-main_loop_all = codegen $ backend $ desugar main_loop
-main_loop_back = pretty $ fst . backend $ desugar main_loop
 

@@ -1,6 +1,6 @@
-module Sugar where
+module Language.Foo.Sugar where
 
-import Lang
+import Language.Foo.Lang
 import Control.Monad.RWS
 
 type Prog = RWS () [Stmt] Int

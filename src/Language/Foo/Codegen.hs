@@ -1,8 +1,8 @@
-module Codegen where
+module Language.Foo.Codegen where
 
-import Lang hiding(Stmt,Decl,While,If,Spawn,Assign,Exp,Wait,Exit,Block)
-import Back
-import CLib
+import Language.Foo.Lang hiding(Stmt,Decl,While,If,Spawn,Assign,Exp,Wait,Exit,Block)
+import Language.Foo.Back
+import Language.Foo.CLib
 import Data.List
 import Data.Maybe
 
