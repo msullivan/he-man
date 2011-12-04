@@ -1,6 +1,8 @@
 .PHONY: clean
 
-docs.pdf: docs.tex ../src/CLib.lhs
+SRC=../src/Language/Foo
+
+docs.pdf: docs.tex ${SRC}/CLib.lhs
 	pdflatex $<
 
 clean:

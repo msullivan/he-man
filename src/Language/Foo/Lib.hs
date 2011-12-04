@@ -1,7 +1,6 @@
-module Lib where
+module Language.Foo.Lib where
 
-import Lang
-import Sugar
+import Language.Foo.Syntax
 
 -- Coreish runtime functions
 mk_nb_event fd modes =

@@ -1,7 +1,58 @@
-module Sugar where
+module Language.Foo.Syntax where
 
-import Lang
 import Control.Monad.RWS
+
+--{{{ Front-end language
+
+type Block = [Stmt]
+type Var = String
+type VDecl = (Var, Type)
+type ThreadCode = ([VDecl], Block)
+
+data Stmt = Decl VDecl Expr
+          | While Expr Block
+          | If Expr Block Block
+          | Spawn ThreadCode [Expr]
+          | Assign Expr Expr
+          | Exp Expr
+          | Wait Expr
+          | Exit
+          deriving (Eq, Ord, Show)
+
+data Type = Int | Bool | String | FD | Buffer | Event -- | ThreadT
+          deriving (Eq, Ord, Show)
+data Expr = Call Prim [Expr]
+          | Arith ArithOp Expr Expr
+          | ArithUnop ArithUnop Expr
+          | RelnOp RelnOp Expr Expr
+          | Constant String
+          | NumLit Integer
+          | StringLit String
+          | Var Var
+          | CurThread
+          deriving (Eq, Ord, Show)
+data ArithOp = Plus | Times | Minus | Div | Mod
+             | And | Or | Xor
+             | Rsh | Lsh
+             deriving (Eq, Ord, Show)
+data ArithUnop = Negate | Not
+               deriving (Eq, Ord, Show)
+data RelnOp = Eq | Less | Greater -- more
+             deriving (Eq, Ord, Show)
+data Prim = CFn String
+          deriving (Eq, Ord, Show)
+
+instance Num Expr where
+  fromInteger = NumLit
+  (+) = Arith Plus
+  (-) = Arith Minus
+  (*) = Arith Times
+  negate = ArithUnop Negate
+  abs = error "full of lies"
+  signum = error "full of lies"
+
+--}}}
+--{{{ Monadic sugar
 
 type Prog = RWS () [Stmt] Int
 
@@ -51,7 +102,6 @@ callName name fn t args = var name t (Call fn args)
 call :: Prim -> Type -> [Expr] -> Prog Expr
 call fn t args = callName "tmp" fn t args
 
-
 spawn :: ThreadCode -> [Expr] -> Prog ()
 spawn thread args = add $ Spawn thread args
 
@@ -86,3 +136,5 @@ infix  4 .==, .<, .> --, ./=, .<=, .>=
 declare_thread :: [VDecl] -> ([Expr] -> Prog ()) -> ThreadCode
 declare_thread decls f = (decls, desugar prog)
   where prog = f (map (Var . fst) decls)
+
+--}}}

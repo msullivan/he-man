@@ -1,8 +1,10 @@
-module Codegen where
+module Language.Foo.Codegen (codegen) where
 
-import Lang hiding(Stmt,Decl,While,If,Spawn,Assign,Exp,Wait,Exit,Block)
-import Back
-import CLib
+import Language.Foo.Syntax
+  (Prim(..), ArithOp(..), ArithUnop(..), RelnOp(..), Type(..), Expr(..))
+import Language.Foo.Backend
+  (Block, Thread, Stmt(..), Tail(..))
+import Language.Foo.CLib
 import Data.List
 import Data.Maybe
 

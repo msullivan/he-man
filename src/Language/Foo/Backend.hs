@@ -1,6 +1,10 @@
-module Back where
+module Language.Foo.Backend
+  (Stmt(..), Tail(..), Block, Thread,
+   backend)
+  where
 
-import qualified Lang
+import qualified Language.Foo.Syntax as Front
+  (Stmt(..), Expr(..), VDecl, Prim(..), Block, Var)
 import Control.Monad.RWS
 import Control.Monad.Writer
 import qualified Data.Set as Set
@@ -11,21 +15,21 @@ type Prgm = [Block]
 type Label = Int
 type ThreadName = Label
 type Block = (Label, ThreadName, [Stmt], Tail)
-type Thread = (ThreadName, [Lang.VDecl])
+type Thread = (ThreadName, [Front.VDecl])
 
-data Stmt = Decl Lang.VDecl Lang.Expr
-          | Assign Lang.Expr Lang.Expr
-          | Exp Lang.Expr
-          | Spawn Label [(Lang.VDecl, Lang.Expr)]
+data Stmt = Decl Front.VDecl Front.Expr
+          | Assign Front.Expr Front.Expr
+          | Exp Front.Expr
+          | Spawn Label [(Front.VDecl, Front.Expr)]
           deriving (Eq, Ord, Show)
 
-data Tail = If Lang.Expr Tail Tail
+data Tail = If Front.Expr Tail Tail
           | Goto Label
           | GotoWait Label
           | Exit
           deriving (Eq, Ord, Show)
 
-backend :: Lang.Block -> ([Block],[Thread])
+backend :: Front.Block -> ([Block],[Thread])
 backend = collectFrees . (mapFst optimizeJumps) . flattenPrgm
 
 mapFst f (x,y) = (f x,y)
@@ -37,9 +41,9 @@ type Flattener = RWS ThreadName ([Block],[Thread]) Label
 flattenPrgm stmts = ((0,0,s,t):blocks,(0,[]):thds) where
   ((s,t),_,(blocks,thds)) = runRWS (flattenStmts stmts [] Exit) 0 1
   
-registerEvent event = [Lang.Exp $
-                       Lang.Call (Lang.CFn "register_event")
-                       [Lang.CurThread, event]]
+registerEvent event = [Front.Exp $
+                       Front.Call (Front.CFn "register_event")
+                       [Front.CurThread, event]]
 
 fresh = do
   x <- get
@@ -61,7 +65,7 @@ inThread threadL = local (\_ -> threadL)
 {- flattenStmts takes a list of Stmts, a list of succeeding Stmts, and the Tail
 for that block, and returns a new list of Stmts and a new Tail. -}
 
-flattenStmts :: [Lang.Stmt] -> [Stmt] -> Tail -> Flattener ([Stmt],Tail)
+flattenStmts :: [Front.Stmt] -> [Stmt] -> Tail -> Flattener ([Stmt],Tail)
 flattenStmts [] aStmts tail = return (aStmts,tail)
 flattenStmts stmts aStmts tail =
   flattenStmt (last stmts) (init stmts) aStmts tail
@@ -74,14 +78,14 @@ T = tail
 L = label
 -}
 
-flattenStmt :: Lang.Stmt -> [Lang.Stmt] -> [Stmt] -> Tail ->
+flattenStmt :: Front.Stmt -> [Front.Stmt] -> [Stmt] -> Tail ->
                Flattener ([Stmt],Tail)
 flattenStmt stmt bStmts aStmts tail =
   case stmt of
-    Lang.Decl vdecl expr -> continue $ Decl vdecl expr
-    Lang.Exp expr -> continue $ Exp expr
-    Lang.Assign expr expr' -> continue $ Assign expr expr'
-    Lang.If expr cs as -> 
+    Front.Decl vdecl expr -> continue $ Decl vdecl expr
+    Front.Exp expr -> continue $ Exp expr
+    Front.Assign expr expr' -> continue $ Assign expr expr'
+    Front.If expr cs as -> 
       do seqL <- fresh
          newBlock seqL aStmts tail
          (conL,altL) <- fresh2
@@ -91,7 +95,7 @@ flattenStmt stmt bStmts aStmts tail =
          newBlock conL cs' conT
          newBlock altL as' altT
          return (bs,tail')
-    Lang.While expr ss ->
+    Front.While expr ss ->
       do (seqL,whileL) <- fresh2
          newBlock seqL aStmts tail
          let whileT = If expr (Goto whileL) (Goto seqL)
@@ -99,16 +103,16 @@ flattenStmt stmt bStmts aStmts tail =
          (ws,whileT') <- flattenStmts ss [] whileT
          newBlock whileL ws whileT'
          return (bs,tail')
-    Lang.Exit ->
+    Front.Exit ->
       do (bs, tail') <- flattenStmts bStmts [] Exit
          return (bs, tail')
-    Lang.Wait expr ->
+    Front.Wait expr ->
       do seqL <- fresh
          newBlock seqL aStmts tail
          let waitT = GotoWait seqL
          (bs,tail') <- flattenStmts (bStmts ++ (registerEvent expr)) [] waitT
          return (bs,tail')
-    Lang.Spawn (vs,ss) args ->
+    Front.Spawn (vs,ss) args ->
       do threadL <- fresh
          let spawn = Spawn threadL (zip vs args)
          (bs,tail') <- flattenStmts bStmts (spawn:aStmts) tail
@@ -137,7 +141,7 @@ optimize (b:bs) ls =
     optimize bs ((Goto label,walk (Goto g) ls):ls)
   (label,vs,[],Exit) ->
     optimize bs ((Goto label,Exit):ls)
-  (label,vs,stmts,If (Lang.NumLit 0) c a) ->
+  (label,vs,stmts,If (Front.NumLit 0) c a) ->
     optimize ((label,vs,stmts,a):bs) ls
   (label,vs,stmts,If e c a) | knownConstantExpr e ->
     optimize ((label,vs,stmts,c):bs) ls
@@ -153,8 +157,8 @@ walk x xs = case (x,lookup x xs) of
 
 knownConstantExpr expr =
   case expr of
-    Lang.NumLit n -> True
-    Lang.StringLit s -> True
+    Front.NumLit n -> True
+    Front.StringLit s -> True
     _ -> False
 
 --}}}
@@ -178,7 +182,7 @@ collectThread blocks (thread,vdecls) = (thread,vdecls')
         -- fromJust exception <=> encountered a truly free variable
         vdecls' = vdecls ++ map getDecl (Set.toList frees')
 
-type Collector = Writer (Set.Set Lang.VDecl,Set.Set Lang.Var)
+type Collector = Writer (Set.Set Front.VDecl,Set.Set Front.Var)
 
 collectBlock (label,thread,stmts,tail) = (decls,frees')
   where collect = do mapM_ collectStmt stmts
@@ -197,19 +201,19 @@ collectStmt s = case s of
   Exp expr -> collectExpr expr
 
 collectExpr e = case e of
-  Lang.Call _ exprs -> mapM_ collectExpr exprs
-  Lang.Arith _ expr expr' ->
+  Front.Call _ exprs -> mapM_ collectExpr exprs
+  Front.Arith _ expr expr' ->
     do collectExpr expr
        collectExpr expr'
-  Lang.ArithUnop _ expr -> collectExpr expr
-  Lang.RelnOp _ expr expr' ->
+  Front.ArithUnop _ expr -> collectExpr expr
+  Front.RelnOp _ expr expr' ->
     do collectExpr expr
        collectExpr expr'
-  Lang.Var var -> tell (mempty,Set.singleton var)
-  Lang.Constant _ -> return ()
-  Lang.NumLit _ -> return ()
-  Lang.StringLit _ -> return ()
-  Lang.CurThread -> return ()
+  Front.Var var -> tell (mempty,Set.singleton var)
+  Front.Constant _ -> return ()
+  Front.NumLit _ -> return ()
+  Front.StringLit _ -> return ()
+  Front.CurThread -> return ()
 
 collectTail t = case t of
   If expr tail tail' ->
@@ -222,68 +226,70 @@ collectTail t = case t of
 
 --}}}
 --{{{ Tests
+{-
 
-testFlat = backend [Lang.Decl ("x",Lang.Int) (Lang.Var "y")]
+testFlat = backend [Front.Decl ("x",Front.Int) (Front.Var "y")]
 
-testIf = backend [Lang.Exp (Lang.NumLit 5),
-                  Lang.If (Lang.NumLit 6)
-                          [Lang.Exp $ Lang.Call (Lang.CFn "cfun") []]
-                          [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
-                  Lang.Exp (Lang.NumLit 10)]
+testIf = backend [Front.Exp (Front.NumLit 5),
+                  Front.If (Front.NumLit 6)
+                          [Front.Exp $ Front.Call (Front.CFn "cfun") []]
+                          [Front.Exp $ Front.Call (Front.CFn "afun") []],
+                  Front.Exp (Front.NumLit 10)]
 
-testWhile = backend [Lang.Exp (Lang.NumLit 5),
-                     Lang.While (Lang.NumLit 6)
-                                [Lang.Exp $ Lang.Call (Lang.CFn "rep") [],
-                                 Lang.Exp $ Lang.Call (Lang.CFn "rep2") []],
-                     Lang.Exp (Lang.NumLit 10)]
+testWhile = backend [Front.Exp (Front.NumLit 5),
+                     Front.While (Front.NumLit 6)
+                                [Front.Exp $ Front.Call (Front.CFn "rep") [],
+                                 Front.Exp $ Front.Call (Front.CFn "rep2") []],
+                     Front.Exp (Front.NumLit 10)]
 
-testExit = backend [Lang.Exp (Lang.NumLit 5),
-                    Lang.Exit,
-                    Lang.Exp (Lang.NumLit 6)]
+testExit = backend [Front.Exp (Front.NumLit 5),
+                    Front.Exit,
+                    Front.Exp (Front.NumLit 6)]
 
-testIfExit = backend [Lang.Exp (Lang.NumLit 5),
-                      Lang.If (Lang.NumLit 6)
-                              [Lang.Exit]
-                              [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
-                      Lang.Exp (Lang.NumLit 10)]
+testIfExit = backend [Front.Exp (Front.NumLit 5),
+                      Front.If (Front.NumLit 6)
+                              [Front.Exit]
+                              [Front.Exp $ Front.Call (Front.CFn "afun") []],
+                      Front.Exp (Front.NumLit 10)]
 
-testWait = backend [Lang.Exp (Lang.NumLit 10),
-                    Lang.Wait (Lang.Call (Lang.CFn "wfun") []),
-                    Lang.Exp (Lang.NumLit 11)]
+testWait = backend [Front.Exp (Front.NumLit 10),
+                    Front.Wait (Front.Call (Front.CFn "wfun") []),
+                    Front.Exp (Front.NumLit 11)]
 
-testSpawn = backend [Lang.Exp (Lang.NumLit 5),
-                     Lang.Spawn ([("x",Lang.Int),("y",Lang.Bool)],
-                       [Lang.Exp (Lang.NumLit 10),
-                        Lang.Exp (Lang.NumLit 15)])
-                       [Lang.Var "arg1",Lang.Var "arg2"],
-                     Lang.Exp (Lang.NumLit 20)]
+testSpawn = backend [Front.Exp (Front.NumLit 5),
+                     Front.Spawn ([("x",Front.Int),("y",Front.Bool)],
+                       [Front.Exp (Front.NumLit 10),
+                        Front.Exp (Front.NumLit 15)])
+                       [Front.Var "arg1",Front.Var "arg2"],
+                     Front.Exp (Front.NumLit 20)]
 
-testSpawnIf = backend [Lang.Exp (Lang.NumLit 5),
-                       Lang.Spawn ([("x",Lang.Int),("y",Lang.Bool)],
-                         [Lang.Exp (Lang.NumLit 0),
-                          Lang.If (Lang.NumLit 6)
-                                  [Lang.Exit]
-                                  [Lang.Exp $ Lang.NumLit 100],
-                          Lang.Exp (Lang.NumLit 1)])
-                         [Lang.Var "arg1",Lang.Var "arg2"],
-                       Lang.If (Lang.NumLit 7)
-                               [Lang.Exp $ Lang.Call (Lang.CFn "cfun") []]
-                               [Lang.Exp $ Lang.Call (Lang.CFn "afun") []],
-                       Lang.Exp (Lang.NumLit 8)]
+testSpawnIf = backend [Front.Exp (Front.NumLit 5),
+                       Front.Spawn ([("x",Front.Int),("y",Front.Bool)],
+                         [Front.Exp (Front.NumLit 0),
+                          Front.If (Front.NumLit 6)
+                                  [Front.Exit]
+                                  [Front.Exp $ Front.NumLit 100],
+                          Front.Exp (Front.NumLit 1)])
+                         [Front.Var "arg1",Front.Var "arg2"],
+                       Front.If (Front.NumLit 7)
+                               [Front.Exp $ Front.Call (Front.CFn "cfun") []]
+                               [Front.Exp $ Front.Call (Front.CFn "afun") []],
+                       Front.Exp (Front.NumLit 8)]
 
-testOptimize = backend [Lang.If (Lang.NumLit 6)
-                                [Lang.Exit]
-                                [Lang.If (Lang.NumLit 7)
-                                         [Lang.Exp (Lang.NumLit 8)]
-                                         [Lang.Exp (Lang.NumLit 9)]],
-                        Lang.Exp (Lang.NumLit 10)]
+testOptimize = backend [Front.If (Front.NumLit 6)
+                                [Front.Exit]
+                                [Front.If (Front.NumLit 7)
+                                         [Front.Exp (Front.NumLit 8)]
+                                         [Front.Exp (Front.NumLit 9)]],
+                        Front.Exp (Front.NumLit 10)]
 
-testCollect = backend [Lang.Decl ("y",Lang.Int) (Lang.NumLit 2),
-                       Lang.Decl ("x",Lang.Int) (Lang.NumLit 2),
-                       Lang.Exp $
-                         Lang.Arith Lang.Plus (Lang.Var "y") (Lang.Var "x"),
-                       Lang.If (Lang.Var "y")
-                               [Lang.Exit]
-                               [Lang.Exp $ Lang.Var "y"]]
+testCollect = backend [Front.Decl ("y",Front.Int) (Front.NumLit 2),
+                       Front.Decl ("x",Front.Int) (Front.NumLit 2),
+                       Front.Exp $
+                         Front.Arith Front.Plus (Front.Var "y") (Front.Var "x"),
+                       Front.If (Front.Var "y")
+                               [Front.Exit]
+                               [Front.Exp $ Front.Var "y"]]
+-}
 
 --}}}

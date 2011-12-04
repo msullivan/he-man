@@ -3,7 +3,7 @@ This module contains wrappers for the \tt{Language.C} AST which expose a
 sufficiently large subset of C99. Only functions whose names begin with \tt{c}
 are meant for use outside this module.
 \begin{code}
-module CLib where
+module Language.Foo.CLib where
 
 import Language.C hiding (cChar, pretty)
 import qualified Language.C
