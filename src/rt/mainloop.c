@@ -79,7 +79,6 @@ static void free_buf(buf_t *buf)
 
 void free_thread(thread_t *thread)
 {
-	return;
 	event_t *e;
 	while ((e = Q_GET_HEAD(&thread->nb_events))) {
 		Q_REMOVE(&thread->nb_events, e, gc_link);
