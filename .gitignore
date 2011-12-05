@@ -8,3 +8,6 @@ docs.pdf
 a.out
 test
 echo.c
+http.c
+echod
+httpd
