@@ -1,6 +1,13 @@
 #include "lib.h"
 #include "mainloop.h"
 
+int set_sock_reuse(int fd)
+{
+	int value = 1;
+	return setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
+	                  &value, sizeof(value));
+}
+
 int make_socket_non_blocking(int sfd)
 {
 	int flags, s;

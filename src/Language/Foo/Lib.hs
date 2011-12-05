@@ -12,6 +12,7 @@ new_buf size =
 -- Sugar for individual functions and whatnot
 socket domain typ protcol =
   callName "sock_fd" (CFn "socket") Int [domain, typ, protcol]
+set_sock_reuse fd = call (CFn "set_sock_reuse") Int [fd]
 make_nb fd = call (CFn "make_socket_non_blocking") Int [fd]
 sock_bind_v4 fd addr port =
   call (CFn "sock_bind_v4") Int [fd, addr, port]

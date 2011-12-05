@@ -15,6 +15,7 @@ setup_connection fd = do
 setup_listener :: Expr -> Prog (Expr, Expr)
 setup_listener port = do
   fd <- socket kAF_INET kSOCK_STREAM 0
+  set_sock_reuse fd
   make_nb fd
   sock_bind_v4 fd kINADDR_ANY port
   sock_listen fd q_limit

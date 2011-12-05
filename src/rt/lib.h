@@ -1,3 +1,4 @@
+#include <string.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -18,6 +19,7 @@
 #define EVENT_WR (EPOLLOUT)
 #define EVENT_RDWR (EPOLLIN|EPOLLOUT)
 
+int set_sock_reuse(int fd);
 int make_socket_non_blocking(int sfd);
 int sock_bind_v4(int fd, int addr, int port);
 int print_int(int n);
