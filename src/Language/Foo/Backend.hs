@@ -137,14 +137,15 @@ optimize (b:bs) ls =
   case b of
   (label,vs,[],_) | Goto label `elem` targets ->
     let (bs',ls') = optimize bs ls in (b:bs',ls')
-  (label,vs,[],Goto g) ->
-    optimize bs ((Goto label,walk (Goto g) ls):ls)
-  (label,vs,[],Exit) ->
-    optimize bs ((Goto label,Exit):ls)
   (label,vs,stmts,If (Front.NumLit 0) c a) ->
     optimize ((label,vs,stmts,a):bs) ls
   (label,vs,stmts,If e c a) | knownConstantExpr e ->
     optimize ((label,vs,stmts,c):bs) ls
+  (0,_,_,_) -> let (bs',ls') = optimize bs ls in (b:bs',ls')
+  (label,vs,[],Goto g) ->
+    optimize bs ((Goto label,walk (Goto g) ls):ls)
+  (label,vs,[],Exit) ->
+    optimize bs ((Goto label,Exit):ls)
   (label,vs,[],If e t t') ->
     optimize bs ((Goto label,walk (If e t t') ls):ls)
   _ -> let (bs',ls') = optimize bs ls in (b:bs',ls')
