@@ -1,9 +1,9 @@
-module Language.Foo.Backend
+module Language.HeMan.Backend
   (Stmt(..), Tail(..), Block, Thread,
    backend)
   where
 
-import qualified Language.Foo.Syntax as Front
+import qualified Language.HeMan.Syntax as Front
   (Stmt(..), Expr(..), VDecl, Prim(..), Block, Var)
 import Control.Monad.RWS
 import Control.Monad.Writer

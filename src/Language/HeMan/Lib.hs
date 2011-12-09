@@ -1,6 +1,6 @@
-module Language.Foo.Lib where
+module Language.HeMan.Lib where
 
-import Language.Foo.Syntax
+import Language.HeMan.Syntax
 
 -- Coreish runtime functions
 mk_nb_event fd modes =

@@ -1,6 +1,6 @@
 module Echo where
 
-import Language.Foo
+import Language.HeMan
 
 q_limit = 1024
 port = 2023

@@ -1,6 +1,6 @@
 .PHONY: clean
 
-SRC=../src/Language/Foo
+SRC=../src/Language/HeMan
 
 docs.pdf: docs.tex ${SRC}/CLib.lhs
 	pdflatex $<

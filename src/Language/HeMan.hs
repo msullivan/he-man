@@ -1,16 +1,16 @@
-module Language.Foo
-  (module Language.Foo.Syntax,
-   module Language.Foo.Lib,
+module Language.HeMan
+  (module Language.HeMan.Syntax,
+   module Language.HeMan.Lib,
    compile,
    testFront, testBack, testAll)
   where
 
-import Language.Foo.Syntax
-import Language.Foo.Lib
+import Language.HeMan.Syntax
+import Language.HeMan.Lib
 
-import Language.Foo.Backend
-import Language.Foo.Codegen
-import Language.Foo.Pretty
+import Language.HeMan.Backend
+import Language.HeMan.Codegen
+import Language.HeMan.Pretty
 
 compile file p = do writeFile file (codegen $ backend $ desugar p)
 

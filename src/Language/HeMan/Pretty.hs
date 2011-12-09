@@ -1,8 +1,8 @@
 {-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
-module Language.Foo.Pretty (pretty) where
+module Language.HeMan.Pretty (pretty) where
 
-import qualified Language.Foo.Syntax as Lang
-import Language.Foo.Backend
+import qualified Language.HeMan.Syntax as Lang
+import Language.HeMan.Backend
 import Text.PrettyPrint
 import Data.List
 import qualified Language.C

@@ -1,4 +1,4 @@
-module Language.Foo.Syntax where
+module Language.HeMan.Syntax where
 
 import Control.Monad.RWS
 

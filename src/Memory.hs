@@ -2,7 +2,7 @@ module Memory where
 
 -- Tests our overhead by spawning as many threads as possible.
 
-import Language.Foo
+import Language.HeMan
 
 child_code = declare_thread [] $
   \[] -> do x <- var "x" Int 1

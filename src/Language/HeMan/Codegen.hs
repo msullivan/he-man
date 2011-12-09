@@ -1,10 +1,10 @@
-module Language.Foo.Codegen (codegen) where
+module Language.HeMan.Codegen (codegen) where
 
-import Language.Foo.Syntax
+import Language.HeMan.Syntax
   (Prim(..), ArithOp(..), ArithUnop(..), RelnOp(..), Type(..), Expr(..))
-import Language.Foo.Backend
+import Language.HeMan.Backend
   (Block, Thread, Stmt(..), Tail(..))
-import Language.Foo.CLib
+import Language.HeMan.CLib
 import Data.List
 import Data.Maybe
 
