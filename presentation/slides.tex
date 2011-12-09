@@ -1,0 +1,102 @@
+\documentclass{beamer}
+\usepackage{graphics}
+\renewcommand{\t}{\texttt}
+
+% Define Beamer appearance
+\usetheme{Montpellier}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{headline}{} % comment out if you want navtree on slides
+\setbeamertemplate{footline}[frame number]
+
+\title{He-Man}
+\subtitle{Haskell Event Manager, Apropos Networking}
+\author{Carlo Angiuli \and Michael Sullivan}
+\date{December 12, 2011}
+
+\begin{document}
+
+\begin{frame}
+\maketitle
+\end{frame}
+
+\begin{frame}
+\frametitle{The C10K problem}
+How do you write network applications that scale to 10k clients?
+\begin{itemize}
+\item Concurrency is essential.
+\item Must maintain per-client state.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Solutions}
+\begin{itemize}
+\item Threads: Write code in the obvious, straight line manner, using blocking
+IO. Memory-intensive, scheduled by OS.
+\item Event loops: Use non-blocking IO and multiplexing like \t{epoll()}.
+Requires refactoring as a state machine.
+\item Threads are easier to program, event loops perform better.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Threads}
+\small
+\begin{verbatim}
+main() {
+  ...
+  while (1) {
+    fd = accept(...);
+    spawn(thread, fd);
+  }
+}
+
+thread(fd) {
+  while (1) {
+    len = read(fd, buf, SIZE);
+    written = 0;
+    while (written < len)
+      written += write(fd, buf + written, len - written);
+  }
+}
+\end{verbatim}
+\end{frame}
+
+\begin{frame}
+\frametitle{Event loops}
+\includegraphics[scale=.5]{graph.pdf}
+\end{frame}
+
+\begin{frame}
+\frametitle{Best of both worlds}
+Write straight-line code and generate state machine automatically.
+\begin{itemize}
+\item Embedded domain-specific language in Haskell.
+\item Compiles to a C event loop, links to a small runtime \\
+(and the rest of your code).
+\item Generates basic blocks not containing blocking IO.
+\item All blocking occurs in the runtime's main loop.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Status}
+\begin{itemize}
+\item We have a working echo server and rudimentary HTTP server.
+\item Supports asynchronous disk IO and non-blocking network IO.
+\item Doing performance testing on HTTP server.
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+\frametitle{Future work}
+\begin{itemize}
+\item Multithreaded event loop.
+\item Typed source language (via phantom types or GADTs).
+\item Optimized runtime.
+\end{itemize}
+\end{frame}
+
+\end{document}
+
+\end{document}

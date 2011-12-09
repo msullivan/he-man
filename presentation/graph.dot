@@ -1,0 +1,8 @@
+digraph G {
+  "..." -> "accept" 
+  "accept" -> "read" [style = dashed, label = " spawn"]
+  "accept" -> "accept"
+  "read" -> "write"
+  "write" -> "write" [label = " written < len"]
+  "write" -> "read"
+}
