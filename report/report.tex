@@ -1,21 +1,31 @@
 \documentclass{article}
 \usepackage{cite}
+\usepackage[colorlinks=true,linkcolor=black,urlcolor=black,citecolor=black]%
+{hyperref}
 \renewcommand{\t}{\texttt}
 
-\title{15-744 Project Report}
+\title{He-Man: A domain-specific language for lightweight concurrency}
+%\subtitle{I said hey, what's goin' on}
 \author{Carlo Angiuli \and Michael Sullivan}
 \date{December 12, 2011}
 
 \begin{document}
 \maketitle
 
-\section{Motivation}
+\section{Introduction}
 
 Modern network applications need to support many simultaneous clients---this is
-known as the C10K (``10,000 client'') problem\cite{Kegel}. But to maintain these
-simultaneous connections, an application must track each client's state
-independently. A straightforward way to do this is to spawn a thread for each
-client, but this approach does not scale as the number of clients grows. 
+known as the C10K (``10,000 client'') problem\cite{Kegel}. Modern servers have
+enough memory and network resources to support this many 
+
+To maintain these simultaneous connections, an application must maintain each
+client's state independently;
+
+while 
+block each one
+
+The simplest way to do this is to spawn a thread for each client, but this
+approach does not scale as the number of clients grows. 
 
 A lightweight approach is to use kernel mechanisms for multiplexed, non-blocking
 I/O, such as \t{select}, \t{poll}, \t{epoll}, or \t{kquery}; unfortunately, to
@@ -31,7 +41,7 @@ generality of this approach still imposes unnecessary overhead on networking
 applications which don't require preemptable, independently scheduled threads
 \cite{Vinoski}.
 
-\section{Proposal}
+Because 
 
 Hence, we intend to produce an embedded domain-specific language in Haskell to
 describe concurrent network applications. This language will provide composable,
@@ -43,21 +53,37 @@ state machine representation usable in a C loop invoking \t{epoll}, using no
 threads whatsoever. We will additionally output a graphical representation of
 this underlying state machine.
 
-The back-end of this system can be implemented via several different options
-which we are still evaluating. One option is to directly interface with the
-\t{epoll} hooks in the Haskell runtime system, bypassing the native lightweight
-threads. Another option is to generate C source code which itself implements the
-network application, optionally linkable with native C code.
+Generate C source code which itself implements the network application, linkable
+with native C code.
 
-\section{Milestones}
+simple runtime
 
-We will first collect a representative sample of Linux network applications and
-examine the range of high-level primitives required to support them. We will
-then decide on a specific back-end for our language, and design the front- and
-back-end in tandem. To evaluate the utility of this language, we will build a
-number of representative applications in our language (e.g., an echo server,
-simple HTTP server) and compare them to traditional implementations, with
-respect to both code simplicity and performance.
+\section{Related work}
+
+The Nginx\cite{Nginx} and Lighttpd\cite{Lighttpd} HTTP servers use an
+event-based architectures, unlike Apache's threads\cite{Apache}, with the
+specific goal of addressing the C10k problem,
+
+Haskell event loop stuff: \cite{LiZdancewic}
+
+Haskell has epoll support and lightweight threads
+
+Erlang
+
+
+\section{Front-end}
+
+\section{Back-end}
+
+\section{Performance}
+
+Each thread takes up XXX memory (see Memory.hs)
+
+HTTP server performance is XXX
+
+\section{Future work}
+
+\section{Conclusions}
 
 \bibliography{citations}{}
 \bibliographystyle{plain}
