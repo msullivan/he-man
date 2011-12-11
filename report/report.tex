@@ -1,8 +1,18 @@
-\documentclass{article}
+\documentclass[twocolumn]{article}
 \usepackage{cite}
 \usepackage[colorlinks=true,linkcolor=black,urlcolor=black,citecolor=black]%
 {hyperref}
 \renewcommand{\t}{\texttt}
+\renewcommand{\b}{\textbf}
+\renewcommand{\i}{\textit}
+
+\newcommand{\prettybox}[1]{\fbox{\parbox{\linewidth}{#1}}}
+
+% A bunch of crazy BNF TeX I wrote once
+\def\bnf#1{\prettybox{\halign{##\hfil& \hfil ##\hfil& \ ##\hfil\cr #1}}}
+\def\p#1{& = & #1 \cr}
+\def\pp#1{& & #1 \cr}
+\def\a#1{& $\mid$ & #1 \cr}
 
 \title{He-Man: A domain-specific language for lightweight concurrency}
 %\subtitle{I said hey, what's goin' on}
@@ -14,66 +24,104 @@
 
 \section{Introduction}
 
-Modern network applications need to support many simultaneous clients---this is
-known as the C10K (``10,000 client'') problem\cite{Kegel}. Modern servers have
-enough memory and network resources to support this many 
+Network applications need to support many simultaneous clients---this is known
+as the C10K (``10,000 client'') problem\cite{Kegel}. Modern servers have enough
+memory and bandwidth for massive concurrency, but it is difficult to design
+applications to take full advantage of these resources.
 
-To maintain these simultaneous connections, an application must maintain each
-client's state independently;
+A server must maintain separate state for each connection, and often waits for
+network or disk I/O to complete before continuing to serve a particular client.
+The simplest solution is to maintain one thread per client, using blocking I/O
+within each thread. This incurs frequent and expensive context switches at the
+operating system level; because the threads have identical code and little
+private data, this approach is unnecessary and does not scale.
 
-while 
-block each one
+An improvement is to write multithreaded code, in which each thread serves
+multiple clients. This is the most popular approach, and is utilized in the
+Apache HTTP server \cite{Apache}.
 
-The simplest way to do this is to spawn a thread for each client, but this
-approach does not scale as the number of clients grows. 
+Languages like Erlang and Haskell provide lightweight threads via user-space
+schedulers. This affords even better performance, but remains unnecessarily
+powerful for this problem space, imposing runtime overhead on applications which
+don't require preemptable, independently scheduled threads \cite{Vinoski}.
 
-A lightweight approach is to use kernel mechanisms for multiplexed, non-blocking
-I/O, such as \t{select}, \t{poll}, \t{epoll}, or \t{kquery}; unfortunately, to
-maintain separate state for each client, application programmers must manually
-structure their code as state machines, which is tedious and error-prone.
-Unsurprisingly, there exist many thin C/C++ wrappers for these facilities, but
-none avoid major code refactoring.
+By far the leanest approach is to write an event loop around kernel facilities
+for multiplexed, non-blocking I/O, such as \t{select}, \t{poll}, \t{epoll}, or
+\t{kquery}. In this model, all I/O occurs at a single call site in the code.
+The programmer is responsible for explicitly maintaining per-client state and
+invoking the appropriate client on each I/O event.
 
-To maintain the illusion of threads (in particular, client-specific state),
-languages like Erlang and Haskell provide lightweight threading via user-space
-schedulers and non-blocking IO. While this affords better performance, the full
-generality of this approach still imposes unnecessary overhead on networking
-applications which don't require preemptable, independently scheduled threads
-\cite{Vinoski}.
+This requires the entire application to be restructured as a state machine with
+explicit per-client control blocks, a model which is very difficult for
+programmers to reason about. There exist numerous C/C++ libraries for event
+loops, but none of these avoid the state machine paradigm.
 
-Because 
+Our observation is that the event loop model, in programming languages parlance,
+is essentially trampolining continuation-passing-style, which can be obtained by
+mechanical translation from the straight-line threaded code. This suggests it is
+possible to obtain the best of both worlds---a threaded programming model with
+the performance of event loops. 
 
-Hence, we intend to produce an embedded domain-specific language in Haskell to
-describe concurrent network applications. This language will provide composable,
-high-level network operations, in which programmers may express their
-application logic naturally, as if using threads. 
+To that end, we present He-Man: Haskell Event Manager, Apropos Networking, an
+embedded domain-specific language (EDSL) hosted in Haskell, which provides a
+threaded abstraction for network application programming and compiles to a C
+event loop based around Linux's \t{epoll}.
 
-However, this high-level description will be automatically synthesized into a
-state machine representation usable in a C loop invoking \t{epoll}, using no
-threads whatsoever. We will additionally output a graphical representation of
-this underlying state machine.
-
-Generate C source code which itself implements the network application, linkable
-with native C code.
-
-simple runtime
+He-Man is a straightforward monadic language with built-in network primitives,
+offering a simple thread-per-client programming model. It is easily extensible
+in Haskell, and also allows calls to foreign C functions; it outputs C code
+which links with an event loop runtime and any code a programmer might prefer to
+write directly in C. Our vision is that C programmers can use He-Man for their
+core application logic, and can write the rest of their application in C. 
 
 \section{Related work}
 
-The Nginx\cite{Nginx} and Lighttpd\cite{Lighttpd} HTTP servers use an
-event-based architectures, unlike Apache's threads\cite{Apache}, with the
-specific goal of addressing the C10k problem,
+The Lighttpd\cite{Lighttpd} and Nginx\cite{Nginx} HTTP servers use event-based
+architectures, with the stated goal of addressing the C10k problem. Indeed, they
+are fast (XXX CITATION)
 
 Haskell event loop stuff: \cite{LiZdancewic}
 
+As mentioned in the intro,
 Haskell has epoll support and lightweight threads
-
 Erlang
-
 
 \section{Front-end}
 
 \section{Back-end}
+
+The back-end converts our linear front-end code into a collection of states 
+
+is to compile C, 
+
+It's important that the only blocking operations happen in the main loop
+
+We separate 
+
+Threads are separated and replaced by labels
+
+pass to make it 
+
+\begin{figure}[ht]
+\centering
+\bnf{
+\i{Thread}
+\p{(\i{thread\_label}, [(\i{Var}, \i{Type})])}
+\i{Block}
+\p{(\i{label}, \i{thread\_label}, [\i{Stmt}], \i{Tail})}
+\i{Tail}
+\p{\b{Goto} \i{label}}
+\a{\b{GotoWait} \i{label}}
+\a{\b{If} \i{Expr} \i{Tail} \i{Tail}}
+\a{\b{Exit}}
+\i{Stmt}
+\p{\b{Decl} (\i{Var}, \i{Type}) \i{Expr}}
+\a{\b{Assign} \i{Expr} \i{Expr}}
+\a{\b{Exp} \i{Expr}}
+\a{\b{Spawn} \i{label} [((\i{Var}, \i{Type}), \i{Expr})]}
+}
+\caption{Back-end grammar}
+\end{figure}
 
 \section{Performance}
 
@@ -82,6 +130,11 @@ Each thread takes up XXX memory (see Memory.hs)
 HTTP server performance is XXX
 
 \section{Future work}
+
+write a better allocator
+
+We will additionally output a graphical representation of this underlying state
+machine.
 
 \section{Conclusions}
 
