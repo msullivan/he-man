@@ -40,6 +40,6 @@ int http_parse(char *buf, int len)
 	if (snprintf(buf, MAXLINE, "%s%s", ROOT_DIR, path) >= MAXLINE)
 		return 500; // Internal server error; something better?
 
-	printf("opening file: %s\n", buf);
+	//printf("opening file: %s\n", buf);
 	return 1;
 }

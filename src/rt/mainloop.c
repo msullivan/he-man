@@ -189,7 +189,7 @@ static void do_poll(bool can_sleep)
 
 static void run_thread(thread_t *thread)
 {
-	printf("running %d\n", thread->tid);
+	//printf("running %d\n", thread->tid);
 	bool runnable = true;
 	// Run the thread until it has run for a while or has stopped being
 	// runnable.
