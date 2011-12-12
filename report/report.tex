@@ -1,6 +1,7 @@
 \documentclass[preprint,11pt]{sigplanconf}
 \usepackage[colorlinks=true,linkcolor=black,urlcolor=black,citecolor=black]%
 {hyperref}
+\usepackage{graphicx}
 \renewcommand{\t}{\texttt}
 \renewcommand{\b}{\textbf}
 \renewcommand{\i}{\textit}
@@ -215,9 +216,66 @@ the same for both versions. When just looking at the core read/write
 loop, the difference is much more apparent: the C version is 38 lines
 of code, and the He-Man version is 5.
 
+The generated code is substantially less tight than the C version,
+although it is unlikely to be any slower in practice. It has 15 states
+and is 319 lines of C. This could be reduced substantially by allowing
+conditionals outside of block tail position.
+
 \subsection{HTTP Server}
 
-HTTP server performance is XXX
+To test the suitability of our system for more complicated programs
+and to demonstrate seperating network logic and application logic, we
+built a simple (and bad) HTTP 1.0 server. The network logic is written
+in He-Man and request parsing is written in C. The C side is
+implemented as a function that takes a buffer and returns whether it
+forms a complete HTTP request and, if so, fills a buffer with the
+filename to serve. The entire server is 54 lines of He-Man haskell and
+27 lines of C. It suffers from a number of major deficiencies, but is
+complete enough to benchmark.
+
+Our benchmark measurements are taken using ab, the Apache HTTP server
+benchmarking tool. \cite{ApacheAB} Measurements were collected by
+having a variable number of client threads request a file 100 times;
+the experiment was repeated with a 16 kilobyte file and a 128 kilobyte
+file. We ran the tests against both our He-Man http server and Apache
+2.2.20, installed with the default Ubuntu 11.10 settings, except for
+client, thread, and process limits being adjusted upwards. Since the
+He-Man runtime is currently only single threaded, we ran the Apache
+web server pinned to a single processor. Since the test repeatedly
+requests the same file, it will always be in the kernel's disk cache,
+and thus this test is not disk bound.
+
+For our experiments, the server ran Linux kernel 3.0.0 on a Lenovo
+Thinkpad W520 with a quad core 2.3 GHz Intel Core i7-2820QM and 8
+gigabytes of RAM, and the client ran on a Lenovo Thinkpad T500 with a
+Intel Core 2 Duo and 8 gigabtyes of RAM.  % XXX: client specs
+The machines were connected by a gigabit Ethernet link.
+
+Unfortunately, ab is not particularly scalable, so we had trouble
+testing with more clients than 500.
+
+Figure \ref{fig:graph128} compares our server to Apache for a 128 KB
+file. Our server performs nearly identically to Apache on this load.
+Figure \ref{fig:graph16} compares our server to Apache for a 16 KB
+file. In this scenario, we substantially outperform Apache. We
+conjecture this is because with a smaller file size, overhead for
+connection setup begins to dominate, and connection setup in He-Man
+consists of a few memory allocations whereas connection setup under
+Apache may require spawning new OS level threads.
+
+\begin{figure*}[!htb]
+	\centering
+	\includegraphics[width=0.9\textwidth]{128kb_graph.png}
+	\caption{Web server benchmark, 128kb file}
+	\label{fig:graph128}
+\end{figure*}
+\begin{figure*}[!htb]
+	\centering
+	\includegraphics[width=0.9\textwidth]{16kb_graph.png}
+	\caption{Web server benchmark, 16kb file}
+	\label{fig:graph16}
+\end{figure*}
+
 
 \subsection{Memory Overhead}
 
