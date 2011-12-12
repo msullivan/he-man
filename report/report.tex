@@ -22,6 +22,8 @@
 \begin{document}
 \maketitle
 
+%XXX: abstract
+
 \section{Introduction}
 
 Network applications need to support many simultaneous clients---this is known
@@ -123,9 +125,23 @@ pass to make it
 \caption{Back-end grammar}
 \end{figure}
 
-\section{Performance}
+\section{Evaluation}
 
-Each thread takes up XXX memory (see Memory.hs)
+The per-thread memory overhead imposed by He-Man is very small: it
+consists of a thread id, list pointers for the scheduling queue, the
+next state to enter, a pointer to the most recently received event,
+and list heads and tails for lists of the events being waited on,
+events owned by the thread, and buffers owned by the thread (the
+latter two are so that we can automatically reclaim these resources
+when the thread exits). On a 64-bit system, the total overhead comes
+out to 88 bytes, and could easily be reduced further (e.g. by using
+singly linked lists).  For comparison, the default thread stack size
+under NPTL on Linux is 2 megabytes.
+
+say something about Memory.hs
+each thread takes up XXX memory (see Memory.hs)
+
+To evaluate He-Man,  
 
 HTTP server performance is XXX
 
