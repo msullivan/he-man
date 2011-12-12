@@ -28,7 +28,6 @@ bool read_state(struct thread_t *thread);
 bool write_state(struct thread_t *thread)
 {
 	echo_thread_t *e = (echo_thread_t *)thread;
-	thread->finished_event = NULL;
 	thread->cont = read_state;
 
 	int left = e->amt_read - e->amt_written;
@@ -54,7 +53,6 @@ bool write_state(struct thread_t *thread)
 bool read_state(struct thread_t *thread)
 {
 	echo_thread_t *e = (echo_thread_t *)thread;
-	thread->finished_event = NULL;
 	thread->cont = read_state;
 	
 	int count = read(e->fd, e->buf, sizeof(e->buf));
@@ -88,7 +86,6 @@ bool setup_thread(struct thread_t *thread)
 bool accept_state(struct thread_t *thread)
 {
 	echo_thread_t *e = (echo_thread_t *)thread;
-	thread->finished_event = NULL;
 	thread->cont = accept_state;
 	
 	int fd = accept(e->fd, NULL, NULL);
@@ -103,7 +100,6 @@ bool accept_state(struct thread_t *thread)
 	new_thread->thread.cont = setup_thread;
 	make_runnable(&new_thread->thread);
 
-	printf("got one!\n");
 	return true;
 }
 

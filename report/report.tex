@@ -191,6 +191,36 @@ pass to make it
 
 \section{Evaluation}
 
+To evaluate He-Man, we built two network applications with He-Man and
+compared them to similar network applications built in C.
+We also discuss He-Man's memory overhead.
+
+\subsection{Echo Server}
+
+To compare the ease of writing event based network applications, we
+built simple echo servers using both He-Man and C. The C version was
+written in as an event loop driven explicit state machine using the
+He-Man runtime. The C version, which is fairly tightly written, is 98
+lines of source, according to SLOCCount. It is fairly readable, but
+its structure is obscured by being split into states and the need to
+explicitly handle read and write returning EAGAIN and write returning
+short. The state machine has a total of five states. The He-Man
+version is 33 lines long and is a very clear representation of the
+control flow of each individual thread. (Additionally, the He-Man
+library has 17 lines of code implementing generic routines for
+simulating blocking IO using nonblocking IO and wait.) The total line
+counts, however, somewhat understate the difference between the
+versions, since the boilerplate for setting up connections is about
+the same for both versions. When just looking at the core read/write
+loop, the difference is much more apparent: the C version is 38 lines
+of code, and the He-Man version is 5.
+
+\subsection{HTTP Server}
+
+HTTP server performance is XXX
+
+\subsection{Memory Overhead}
+
 The per-thread memory overhead imposed by He-Man is very small: it
 consists of a thread id, list pointers for the scheduling queue, the
 next state to enter, a pointer to the most recently received event,
@@ -205,9 +235,6 @@ under NPTL on Linux is 2 megabytes.
 say something about Memory.hs
 each thread takes up XXX memory (see Memory.hs)
 
-To evaluate He-Man,  
-
-HTTP server performance is XXX
 
 \section{Future work}
 
