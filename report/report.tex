@@ -49,7 +49,7 @@ don't require preemptable, independently scheduled threads \cite{Vinoski}.
 
 By far the leanest approach is to write an event loop around kernel facilities
 for multiplexed, non-blocking I/O, such as \t{select}, \t{poll}, \t{epoll}, or
-\t{kquery}. In this model, all I/O occurs at a single call site in the code.
+\t{kquery}. In this model, all blocking occurs at a single call site in the code.
 The programmer is responsible for explicitly maintaining per-client state and
 invoking the appropriate client on each I/O event.
 
