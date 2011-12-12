@@ -4,7 +4,7 @@ import Language.HeMan
 
 q_limit = 1024
 port = 8080
-bufsize = 4096-1
+bufsize = 4096*4
 
 http_parse buf len =
   callName "parse_result" (CFn "http_parse") Int [buf, len]
@@ -40,7 +40,7 @@ parse_request buf ev = do
 child_code = declare_thread [("child_fd", Int)] $
   \[child_fd] -> do
   ev <- setup_connection child_fd
-  buf <- new_buf (bufsize+1) -- wee.
+  buf <- new_buf (bufsize+1) -- pfbbt.
   parse_result <- parse_request buf ev
   -- XXX: error messages or something
   ifE' (parse_result .> 1 .|| parse_result .< 0) exit

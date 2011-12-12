@@ -10,6 +10,7 @@
 #include <time.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <signal.h>
 
 #include <libaio.h>
 #include <sys/eventfd.h>
@@ -215,6 +216,9 @@ void main_loop(void)
 void setup_main_loop(void)
 {
 	int ret;
+
+	signal(SIGPIPE, SIG_IGN);
+	
 	static event_t aio_dummy_event;
 	state.aio_dummy_event = &aio_dummy_event;
 
