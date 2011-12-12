@@ -39,7 +39,7 @@ file_write fd buf len =
 print_int n  =
   call (CFn "print_int") Int [n]
 
-errno = Var "errno" -- weeeee
+errno = Constant "errno" -- weeeee
 
 -- TODO: a bunch more
 
@@ -76,4 +76,14 @@ full_write ev buf size = do
     amt <- do_write ev (buf + amt_written) (size - amt_written)
     amt_written .= amt_written + amt
     ifE' (amt .== 0) $ do failed .= 1
+  return amt_written
+
+full_write_good_but_broken (fd, e) buf size = do
+  amt_written <- var "total_written" Int 0
+  failed <- var "write_failed" Int 0
+  while (amt_written .< size .&& failed .== 0) $ do
+    amt <- sock_write fd (buf + amt_written) (size - amt_written)
+    ifE (amt .== -1) (wait e) $
+      (ifE (amt .== 0) (failed .= 1)
+       (amt_written .= amt_written + amt))
   return amt_written
