@@ -1,5 +1,4 @@
-\documentclass[twocolumn]{article}
-\usepackage{cite}
+\documentclass[preprint,11pt]{sigplanconf}
 \usepackage[colorlinks=true,linkcolor=black,urlcolor=black,citecolor=black]%
 {hyperref}
 \renewcommand{\t}{\texttt}
@@ -16,7 +15,8 @@
 
 \title{He-Man: A domain-specific language for lightweight concurrency}
 %\subtitle{I said hey, what's goin' on}
-\author{Carlo Angiuli \and Michael Sullivan}
+\authorinfo{Carlo Angiuli}{}{cangiuli@cs.cmu.edu}
+\authorinfo{Michael Sullivan}{}{mjsulliv@andrew.cmu.edu}
 \date{December 12, 2011}
 
 \begin{document}
@@ -88,9 +88,11 @@ As mentioned in the intro,
 Haskell has epoll support and lightweight threads
 Erlang
 
-\section{Front-end}
+\section{Implementation}
 
-\section{Back-end}
+\subsection{Front-end}
+
+\subsection{Back-end}
 
 The back-end converts our linear front-end code into a collection of states 
 
@@ -124,6 +126,8 @@ pass to make it
 }
 \caption{Back-end grammar}
 \end{figure}
+
+\subsection{Runtime}
 
 \section{Evaluation}
 
