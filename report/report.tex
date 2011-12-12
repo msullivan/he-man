@@ -80,11 +80,22 @@ core application logic, and can write the rest of their application in C.
 
 \section{Related work}
 
-The Lighttpd \cite{Lighttpd} and Nginx \cite{Nginx} HTTP servers use event-based
-architectures, with the stated goal of addressing the C10k problem. Indeed, they
-are fast (XXX CITATION)
+The C10K problem is particularly evident in the context of HTTP servers, which
+routinely maintain many concurrent connections. The popular Lighttpd and Nginx
+HTTP server projects were both started with the explicit goal of addressing the
+C10K problem \cite{Lighttpd,Nginx}, and both use event-based architectures
+similar to He-Man.
+
+A number of functional languages support lightweight threads with user-space
+scheduling, most notably Erlang, which was designed for highly concurrent
+telecommunications applications, and easily scales to 20,000 clients
+\cite{Hellstrom}. Haskell 
+
+
 
 Haskell event loop stuff: \cite{LiZdancewic}
+
+FoxNet: \cite{BiagioniEtAl}
 
 As mentioned in the intro,
 Haskell has epoll support and lightweight threads
@@ -101,7 +112,7 @@ we don't need arbitrary interleaving of instructions,
 
 there shouldn't be much
 
-and I/O time (both network and disk) probably dominates computation time
+I/O time (both network and disk) dominates the computation time
 
 thus it's important to run short computations until a thread blocks, 
 
