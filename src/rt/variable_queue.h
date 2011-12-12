@@ -10,6 +10,14 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#define VQ_DISABLE_COUNT
+
+#ifdef VQ_DISABLE_COUNT
+#define CNT(x)
+#else
+#define CNT(x) x
+#endif
+
 /**
  * @def Q_NEW_HEAD(Q_HEAD_TYPE, Q_ELEM_TYPE) 
  *
@@ -30,7 +38,7 @@
 	typedef struct Q_HEAD_TYPE {             \
 		struct Q_ELEM_TYPE *head;            \
 		struct Q_ELEM_TYPE *tail;            \
-		size_t count;                        \
+		CNT(size_t count;)					 \
 	} Q_HEAD_TYPE
 
 /**
@@ -72,7 +80,7 @@
  **/
 #define Q_INIT_HEAD(Q_HEAD) do {                \
 		(Q_HEAD)->head = (Q_HEAD)->tail = NULL; \
-		(Q_HEAD)->count = 0;                    \
+		CNT((Q_HEAD)->count = 0;)				\
 	} while (0)
 
 /**
@@ -136,7 +144,7 @@
 		(Q_HEAD)->head = (Q_ELEM);                      \
 		if (!(Q_HEAD)->tail)                            \
 			(Q_HEAD)->tail = (Q_ELEM);                  \
-		(Q_HEAD)->count++;                              \
+		CNT((Q_HEAD)->count++;)							\
 		                                                \
 		Q_ASSERT_CONSISTENT(Q_HEAD, Q_ELEM, LINK_NAME); \
 	} while (0)
@@ -165,7 +173,7 @@
 		(Q_HEAD)->tail = (Q_ELEM);					  	\
 		if (!(Q_HEAD)->head)							\
 			(Q_HEAD)->head = (Q_ELEM);					\
-		(Q_HEAD)->count++;                              \
+		CNT((Q_HEAD)->count++;)							\
 		                                                \
 		Q_ASSERT_CONSISTENT(Q_HEAD, Q_ELEM, LINK_NAME); \
 	} while (0)
@@ -262,7 +270,7 @@
 		(Q_INQ)->LINK_NAME.next = (Q_TOINSERT);                   \
 		if ((Q_INQ) == (Q_HEAD)->tail)                            \
 			(Q_HEAD)->tail = (Q_TOINSERT);                        \
-		(Q_HEAD)->count++;                                        \
+		CNT((Q_HEAD)->count++;)									  \
 		                                                          \
 		Q_ASSERT_CONSISTENT(Q_HEAD, Q_TOINSERT, LINK_NAME);       \
 	} while (0)
@@ -292,7 +300,7 @@
 		(Q_INQ)->LINK_NAME.prev = (Q_TOINSERT);                   \
 		if ((Q_INQ) == (Q_HEAD)->head)                            \
 			(Q_HEAD)->head = (Q_TOINSERT);                        \
-		(Q_HEAD)->count++;                                        \
+		CNT((Q_HEAD)->count++;)									  \
 		                                                          \
 		Q_ASSERT_CONSISTENT(Q_HEAD, Q_TOINSERT, LINK_NAME);       \
 	} while (0)
@@ -325,7 +333,7 @@
 			(Q_HEAD)->head = (Q_ELEM)->LINK_NAME.next;                  \
 		if ((Q_ELEM) == (Q_HEAD)->tail)                                 \
 			(Q_HEAD)->tail = (Q_ELEM)->LINK_NAME.prev;                  \
-		(Q_HEAD)->count--;                                              \
+		CNT((Q_HEAD)->count--;)											\
 		(Q_ELEM)->LINK_NAME.next = NULL;                                \
 		(Q_ELEM)->LINK_NAME.prev = NULL;                                \
 	} while (0)
@@ -347,10 +355,10 @@
 			(Q_HEAD1)->tail->LINK_NAME.next = (Q_HEAD2)->head;			\
 			(Q_HEAD2)->head->LINK_NAME.prev = (Q_HEAD1)->tail;			\
 			(Q_HEAD1)->tail = (Q_HEAD2)->tail;							\
-			(Q_HEAD1)->count += (Q_HEAD2)->count;						\
+			CNT((Q_HEAD1)->count += (Q_HEAD2)->count;)					\
 		}																\
 		(Q_HEAD2)->head = (Q_HEAD2)->tail = NULL;						\
-		(Q_HEAD2)->count = 0;											\
+		CNT((Q_HEAD2)->count = 0;)										\
 	} while (0)
 
 
