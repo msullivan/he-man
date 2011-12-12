@@ -22,12 +22,14 @@
 \begin{document}
 \maketitle
 
-%XXX: abstract
+\begin{abstract}
+TODO
+\end{abstract}
 
 \section{Introduction}
 
 Network applications need to support many simultaneous clients---this is known
-as the C10K (``10,000 client'') problem\cite{Kegel}. Modern servers have enough
+as the C10K (``10,000 client'') problem \cite{Kegel}. Modern servers have enough
 memory and bandwidth for massive concurrency, but it is difficult to design
 applications to take full advantage of these resources.
 
@@ -78,7 +80,7 @@ core application logic, and can write the rest of their application in C.
 
 \section{Related work}
 
-The Lighttpd\cite{Lighttpd} and Nginx\cite{Nginx} HTTP servers use event-based
+The Lighttpd \cite{Lighttpd} and Nginx \cite{Nginx} HTTP servers use event-based
 architectures, with the stated goal of addressing the C10k problem. Indeed, they
 are fast (XXX CITATION)
 
@@ -88,9 +90,67 @@ As mentioned in the intro,
 Haskell has epoll support and lightweight threads
 Erlang
 
+\section{The event loop model}
+
+
+
+Event loops are a good way to get the level of concurrency that you need
+
+we don't need arbitrary interleaving of instructions, 
+
+
+there shouldn't be much
+
+and I/O time (both network and disk) probably dominates computation time
+
+thus it's important to run short computations until a thread blocks, 
+
+The back-end converts our linear front-end code into a collection of states 
+
+is to compile C, 
+
+It's important that the only blocking operations happen in the main loop
+
+We separate 
+
+Threads are separated and replaced by labels
+
+pass to make it 
+
+
+
 \section{Implementation}
 
 \subsection{Front-end}
+
+\begin{figure}[ht]
+\centering
+\bnf{
+\i{Stmt}
+\p{\b{Decl} (\i{Var}, \i{Type}) \i{Expr}}
+\a{\b{While} \i{Expr} [\i{Stmt}]}
+\a{\b{If} \i{Expr} [\i{Stmt}] [\i{Stmt}]}
+\a{\b{Spawn} ([(\i{Var}, \i{Type})], [\i{Stmt}]) [\i{Expr}]}
+\a{\b{Assign} \i{Expr} \i{Expr}}
+\a{\b{Exp} \i{Expr}}
+\a{\b{Wait} \i{Expr}}
+\a{\b{Exit}}
+\i{Expr}
+\p{\b{Call} \i{String} [\i{Expr}]}
+\a{\b{Arith} \i{ArithOp} \i{Expr} \i{Expr}}
+\a{\b{ArithUnop} \i{ArithUnop} \i{Expr}}
+\a{\b{RelnOp} \i{RelnOp} \i{Expr} \i{Expr}}
+\a{\b{Constant} \i{String}}
+\a{\b{NumLit} \i{Integer}}
+\a{\b{StringLit} \i{String}}
+\a{\b{Var} \i{String}}
+\a{\b{CurThread}}
+\i{Type} 
+\p{\b{Int} $\mid$ \b{Bool} $\mid$ \b{String}
+   $\mid$ \b{FD} $\mid$ \b{Buffer} $\mid$ \b{Event}}
+}
+\caption{Front-end grammar.}
+\end{figure}
 
 \subsection{Back-end}
 
@@ -124,7 +184,7 @@ pass to make it
 \a{\b{Exp} \i{Expr}}
 \a{\b{Spawn} \i{label} [((\i{Var}, \i{Type}), \i{Expr})]}
 }
-\caption{Back-end grammar}
+\caption{Back-end grammar.}
 \end{figure}
 
 \subsection{Runtime}
@@ -153,12 +213,18 @@ HTTP server performance is XXX
 
 write a better allocator
 
+less space per thread
+
+decide when to allow internal if statements
+
 We will additionally output a graphical representation of this underlying state
 machine.
+
+observable sharing (?)
 
 \section{Conclusions}
 
 \bibliography{citations}{}
-\bibliographystyle{plain}
+\bibliographystyle{abbrvnat}
 
 \end{document}
