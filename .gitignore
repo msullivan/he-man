@@ -11,3 +11,7 @@ echo.c
 http.c
 echod
 httpd
+report.out
+proposal.out
+report.pdf
+files
