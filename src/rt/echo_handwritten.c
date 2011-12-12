@@ -103,7 +103,6 @@ bool accept_state(struct thread_t *thread)
 	new_thread->thread.cont = setup_thread;
 	make_runnable(&new_thread->thread);
 
-	printf("got one!\n");
 	return true;
 }
 
