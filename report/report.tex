@@ -202,7 +202,6 @@ pass to make it
 
 \subsection{Runtime}
 
-<<<<<<< HEAD
 The He-Man runtime is written in C and provides a state machine based
 thread scheduling model. In the view of the runtime, a thread consists
 of some bookkeeping state, some private state, and the next
@@ -231,25 +230,25 @@ abstraction. To the runtime, an event consists of a pointer to a
 thread that is blocked on it and some arbitrary identifier (in
 practice the file descriptor). To create an event for use with
 nonblocking IO, an event is allocated, marked with the associated file
-descriptor, and a new edge-triggered epoll event is created for the
-file descriptor using epoll\_ctl, with the event structure as the
+descriptor, and a new edge-triggered \t{epoll} event is created for the
+file descriptor using \t{epoll\_ctl}, with the event structure as the
 associated pointer data.
 We use edge-triggered instead of level-triggered so that we can wait
 on both read and write events for a given file descriptor without
 having to adjust which we are waiting for at runtime, and because
 He-Man's programming model makes it easy to meet the requirement that
 blocking on a file descriptor is only done after an operation on the
-descriptor has returned EAGAIN.
-The actual polling for IO events is done by calling epoll. For each
+descriptor has returned \t{EAGAIN}.
+The actual polling for IO events is done by calling \t{epoll}. For each
 event that has been returned by epoll, if a thread is waiting on the
 event, the thread is added to the runqueue. If the the runqueue is
 empty, the call to epoll is blocking, otherwise it is called with a
 timeout of zero seconds, to simply poll for events.
 
 The runtime also has support for Linux Kernel Asynchronous IO for file
-IO, using a Linux eventfd to allow epoll to wait on AIO events. This
-support is currently unused, since it was not actually necessary to
-acheive acceptable performance for the web server.
+IO, using a Linux \t{eventfd} to allow \t{epoll} to wait on AIO
+events. This support is currently unused, since it was not actually
+necessary to acheive acceptable performance for the web server.
 
 \section{Evaluation}\label{sec:evaluation}
 
