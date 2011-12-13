@@ -115,30 +115,24 @@ execution.
 
 As of version 2.5.44, Linux has supported \t{epoll} for non-blocking
 multiplexing I/O. A server can register any number of file descriptors with
-\t{epoll\_ctl}, and a call to \t{epoll\_wait} returns the ready descriptors. In
-the event loop model, all blocking I/O occurs in a single loop which 
+\t{epoll\_ctl}, and a call to \t{epoll\_wait} returns the ready descriptors. 
 
-It's important that the only blocking operations happen in the main loop
+In the event loop model, all blocking I/O must occur in a single loop around
+\t{epoll\_wait}. Each thread is stored as a \t{struct} containing thread-local
+state, including the next instruction pointer, and each registered descriptor
+has a pointer to the thread waiting on it. Instead of performing an I/O call, a
+thread simply registers a new descriptor and returns back to the main loop;
+whenever a descriptor is ready, the main loop jumps to the instruction pointer
+of the thread waiting on it. Spawning a new thread requires only allocating a
+new thread \t{struct}, and registering it in the main loop.
 
-Event loops are a good way to obtain this 
-to get the level of concurrency that you need
-
-
-there shouldn't be much
-
-
-thus it's important to run short computations until a thread blocks, 
-
-The back-end converts our linear front-end code into a collection of states 
-
-is to compile C, 
-
-
-We separate 
-
-Threads are separated and replaced by labels
-
-pass to make it 
+Each thread must be split into one function for each jump target, and
+thread-local state must be accessed via the thread \t{struct} shared between
+these functions. Furthermore, because I/O only occurs in the main loop, these
+functions must return immediately after registering new descriptors. As a
+result, each thread is split up into quite a few functions in this paradigm.
+Because this translation from threaded to event-based is quite mechanical, we
+are able to perform it automatically in the He-Man back-end.
 
 \section{Implementation}
 
