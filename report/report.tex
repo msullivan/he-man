@@ -169,19 +169,7 @@ are able to perform it automatically in the He-Man back-end.
 
 \subsection{Back-end}
 
-The back-end converts our linear front-end code into a collection of states 
-
-is to compile C, 
-
-It's important that the only blocking operations happen in the main loop
-
-We separate 
-
-Threads are separated and replaced by labels
-
-pass to make it 
-
-\begin{figure}[ht]
+\begin{figure}[ht]\label{fig:backend}
 \centering
 \bnf{
 \i{Thread}
@@ -202,6 +190,57 @@ pass to make it
 \caption{Back-end grammar.}
 \end{figure}
 
+The most important task for our back-end is to convert our linear front-end code
+into a collection of states appropriate for an event loop. This occurs in our
+\t{flattenPrgm} pass, which passes through the program in reverse order, 
+
+is to compile C, 
+
+It's important that the only blocking operations happen in the main loop
+
+We separate 
+
+Threads are separated and replaced by labels
+
+This pass generates a correct state machine, albeit one which contains many
+blocks with only tail-position jumps. We follow it up with the \t{optimizeJumps}
+pass, which removes these empty blocks, redirecting all \t{Goto}s to their
+ultimate destinations, and allowing nested \t{If}s in tail position. Nested
+\t{If}s occur frequently in generated code, for example, immediately before an
+\t{if} statement at the end of a \t{while} loop, when the code might next jump
+inside the \t{if} statement, to the top of the \t{while} loop, or after the
+\t{while} loop, depending on multiple tests. Although this pass is, strictly
+speaking, an optimization, it is critical for obtaining high-quality output.
+
+At this point, the program's control flow is correct, but many blocks will
+contain uses of variables which have been declared in previous blocks. The
+\t{collectFrees} pass traverses each block, collecting the variables used but
+not declared in each block. (Recall that our front-end ensures that a variable
+is only ever declared in one location, so there is no ambiguity.) The local
+variables of each thread are the union of the used-not-declared variables in
+each of its blocks. We save this list of local variables in the appropriate
+\i{Thread} container.
+
+Note that we could simply mark all declared variables as thread-local, but
+variables which are only used in same block as their declaration need not be
+stored thread-locally. We want to minimize the number of thread-local variables,
+because this directly impacts the memory overhead of each thread.
+
+From this point, the path to C code is fairly straightforward. For each thread,
+we generate a \t{struct} \t{thread$n$\_t} declaration containing a \t{thread\_t}
+struct with generic thread control information, followed by all thread-local
+variables. Each block is translated to a function taking as argument a
+\t{thread\_t} passed in from the main loop. It casts this to the \t{struct} type
+for its thread in order to access thread-local variables.
+
+\t{Stmt}s are translated straightforwardly; threads are spawned by allocating a
+new \t{struct} for the corresponding thread, setting its continuation to the
+first block in the thread, and adding it to the list of runnable threads.
+\t{Expr}s and \t{Tail}s are similarly straightforward; variables in the thread
+\t{struct} must be replaced by references to their thread-local value, while
+other variables are guaranteed to be block-local. Finally, we must also generate
+a \t{main} function which spawns the first thread and jumps to the main loop.
+  
 \subsection{Runtime}
 
 The He-Man runtime is written in C and provides a state machine based
@@ -357,10 +396,14 @@ under NPTL on Linux is 2 megabytes.
 \section{Future work}
 
 We will continue our work on He-Man, and hope to submit it to a programming
-languages conference such as ICFP. We plan to expand the language with the
-ability to declare functions and make non-external function calls within a
-thread. This will make code simpler and shorter by allowing the programmer to
-abstract away common functionality like read and write loops.
+languages conference such as ICFP. Most importantly, we plan to rework our
+front-end so as to reject badly-typed programs; currently, we do not ensure
+that, e.g., we do not take the sum of two file handles.
+
+We also plan to expand the language with the ability to declare functions and
+make non-external function calls within a thread. This will make code simpler
+and shorter by allowing the programmer to abstract away common functionality
+like read and write loops.
 
 In the runtime, our current thread \t{struct}s are larger than necessary.
 Because the runtime allocates a \t{struct} on every thread spawn, we should
