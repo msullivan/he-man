@@ -81,15 +81,27 @@ core application logic, and can write the rest of their application in C.
 
 \section{Related work}
 
-The Lighttpd \cite{Lighttpd} and Nginx \cite{Nginx} HTTP servers use event-based
-architectures, with the stated goal of addressing the C10k problem. Indeed, they
-are fast (XXX CITATION)
+The C10K problem is particularly evident in the context of HTTP servers, which
+routinely maintain many concurrent connections. As we discuss in Section
+\ref{sec:evaluation}, Apache does not scale particularly well. The popular
+Lighttpd and Nginx HTTP server projects were both started with the explicit goal
+of outperforming Apache with respect to the C10K problem \cite{Lighttpd,Nginx},
+and both use event-based architectures similar to He-Man. 
 
-Haskell event loop stuff: \cite{LiZdancewic}
+A number of functional languages support lightweight threads with user-space
+scheduling, most notably Erlang, which was designed for highly concurrent
+telecommunications applications, and easily scales to 20,000 clients
+\cite{Hellstrom}. The Haskell runtime supports a variety of concurrency
+primitives which permit a lightweight threaded programming model \cite{LiEtAl}.
 
-As mentioned in the intro,
-Haskell has epoll support and lightweight threads
-Erlang
+%A number of custom network stack implementations exist for functional
+%languages, such as FoxNet for Standard ML \cite{BiagioniEtAl}, and 
+
+He-Man is most similar to Li and Zdancewic's Haskell implementation of a hybrid
+event/thread programming model for network applications \cite{LiZdancewic}.
+Their project has similar goals to ours, but is implemented entirely within
+Haskell. As a result, unlike He-Man, the entire application must be written in
+Haskell, and incurs runtime overhead from the Haskell system.
 
 \section{The event loop model}
 
@@ -102,7 +114,7 @@ we don't need arbitrary interleaving of instructions,
 
 there shouldn't be much
 
-and I/O time (both network and disk) probably dominates computation time
+I/O time (both network and disk) dominates the computation time
 
 thus it's important to run short computations until a thread blocks, 
 
@@ -190,6 +202,7 @@ pass to make it
 
 \subsection{Runtime}
 
+<<<<<<< HEAD
 The He-Man runtime is written in C and provides a state machine based
 thread scheduling model. In the view of the runtime, a thread consists
 of some bookkeeping state, some private state, and the next
@@ -238,7 +251,7 @@ IO, using a Linux eventfd to allow epoll to wait on AIO events. This
 support is currently unused, since it was not actually necessary to
 acheive acceptable performance for the web server.
 
-\section{Evaluation}
+\section{Evaluation}\label{sec:evaluation}
 
 To evaluate He-Man, we built two network applications with He-Man and
 compared them to similar network applications built in C.
