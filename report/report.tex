@@ -493,6 +493,16 @@ same thread to have distinct spawn sites without code duplication. This does not
 add inefficiency, but does increase the size of our output code. 
 
 \section{Conclusions}
+Expressing network application logic as a compiled, embedded, domain
+specific language is an elegant and practical way to build scalable
+network applications without having to manually write state-machine
+based event-loop code. Embedding the language in Haskell allows
+powerful metaprogramming and allowed the language to be developed with
+a fraction of the effort of building a full language. Compiling to C
+allows C programmers to write parts of their system (for example, the
+caching layer) in C while writing the network logic in
+straightforward, straight-line He-Man code.
+
 
 \bibliography{citations}{}
 \bibliographystyle{abbrvnat}
