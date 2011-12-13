@@ -52,9 +52,9 @@ don't require preemptable, independently scheduled threads \cite{Vinoski}.
 
 By far the leanest approach is to write an event loop around kernel facilities
 for multiplexed, non-blocking I/O, such as \t{select}, \t{poll}, \t{epoll}, or
-\t{kquery}. In this model, all blocking occurs at a single call site in the code.
-The programmer is responsible for explicitly maintaining per-client state and
-invoking the appropriate client on each I/O event.
+\t{kquery}. In this model, all blocking occurs at a single call site in the
+code. The programmer is responsible for explicitly maintaining per-client state
+and invoking the appropriate client on each I/O event.
 
 This requires the entire application to be restructured as a state machine with
 explicit per-client control blocks, a model which is very difficult for
@@ -100,21 +100,32 @@ primitives which permit a lightweight threaded programming model \cite{LiEtAl}.
 He-Man is most similar to Li and Zdancewic's Haskell implementation of a hybrid
 event/thread programming model for network applications \cite{LiZdancewic}.
 Their project has similar goals to ours, but is implemented entirely within
-Haskell. As a result, unlike He-Man, the entire application must be written in
-Haskell, and incurs runtime overhead from the Haskell system.
+Haskell. As a result, unlike He-Man, their framework requires entire
+applications to be written in Haskell, and incurs runtime overhead from the
+Haskell system.
 
 \section{The event loop model}
 
+Networking applications require a very constrained form of concurrency. Because
+I/O (both network and disk) latency dominates the computation time, each
+client's thread of execution spends most of its time waiting on I/O. In
+particular, we would like to always yield to a client no longer blocked on I/O;
+we need not yield to blocked clients, nor do we need arbitrary interleaving of
+execution.
 
+As of version 2.5.44, Linux has supported \t{epoll} for non-blocking
+multiplexing I/O. A server can register any number of file descriptors with
+\t{epoll\_ctl}, and a call to \t{epoll\_wait} returns the ready descriptors. In
+the event loop model, all blocking I/O occurs in a single loop which 
 
-Event loops are a good way to get the level of concurrency that you need
+It's important that the only blocking operations happen in the main loop
 
-we don't need arbitrary interleaving of instructions, 
+Event loops are a good way to obtain this 
+to get the level of concurrency that you need
 
 
 there shouldn't be much
 
-I/O time (both network and disk) dominates the computation time
 
 thus it's important to run short computations until a thread blocks, 
 
@@ -122,15 +133,12 @@ The back-end converts our linear front-end code into a collection of states
 
 is to compile C, 
 
-It's important that the only blocking operations happen in the main loop
 
 We separate 
 
 Threads are separated and replaced by labels
 
 pass to make it 
-
-
 
 \section{Implementation}
 
