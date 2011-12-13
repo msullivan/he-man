@@ -190,6 +190,54 @@ pass to make it
 
 \subsection{Runtime}
 
+The He-Man runtime is written in C and provides a state machine based
+thread scheduling model. In the view of the runtime, a thread consists
+of some bookkeeping state, some private state, and the next
+continuation function the thread is to run. The main part of the
+runtime's state consists of the runqueue, which contains a list of all
+currently runnable threads.
+
+Continuation functions take a pointer to the thread information,
+update the continuation field in the thread data, and return whether
+the thread is still runnable; to block, a continuation function
+registers itself as blocking on an event and returns false; to exit,
+it frees the thread structure and returns false.
+Running a thread, then, consists of repeatedly invoking the thread's
+continuation function until it returns false. To prevent a
+thread that does not need to block from starving the rest of the
+system, after some number of invocations of the continuation
+(currently 50), the thread is paused and put on the back of the
+runqueue.
+
+The He-Man runtime main loop is very simple, then: it loops
+indefinitely, and on each iteration it removes the thread at the head
+of the runqueue (if it exists) and runs it, and polls for IO events.
+
+The runtime provides a blocking mechanism based on an event
+abstraction. To the runtime, an event consists of a pointer to a
+thread that is blocked on it and some arbitrary identifier (in
+practice the file descriptor). To create an event for use with
+nonblocking IO, an event is allocated, marked with the associated file
+descriptor, and a new edge-triggered epoll event is created for the
+file descriptor using epoll\_ctl, with the event structure as the
+associated pointer data.
+We use edge-triggered instead of level-triggered so that we can wait
+on both read and write events for a given file descriptor without
+having to adjust which we are waiting for at runtime, and because
+He-Man's programming model makes it easy to meet the requirement that
+blocking on a file descriptor is only done after an operation on the
+descriptor has returned EAGAIN.
+The actual polling for IO events is done by calling epoll. For each
+event that has been returned by epoll, if a thread is waiting on the
+event, the thread is added to the runqueue. If the the runqueue is
+empty, the call to epoll is blocking, otherwise it is called with a
+timeout of zero seconds, to simply poll for events.
+
+The runtime also has support for Linux Kernel Asynchronous IO for file
+IO, using a Linux eventfd to allow epoll to wait on AIO events. This
+support is currently unused, since it was not actually necessary to
+acheive acceptable performance for the web server.
+
 \section{Evaluation}
 
 To evaluate He-Man, we built two network applications with He-Man and
