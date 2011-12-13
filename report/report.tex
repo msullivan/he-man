@@ -281,7 +281,7 @@ do_write (fd, e) buf size =
 
 \subsection{Back-end}
 
-\begin{figure}[ht]\label{fig:backend}
+\begin{figure}[ht]
 \centering
 \bnf{
 \i{Thread}
@@ -300,19 +300,44 @@ do_write (fd, e) buf size =
 \a{\b{Spawn} \i{label} [((\i{Var}, \i{Type}), \i{Expr})]}
 }
 \caption{Back-end grammar.}
+\label{fig:back-syntax}
 \end{figure}
 
-The most important task for our back-end is to convert our linear front-end code
-into a collection of states appropriate for an event loop. This occurs in our
-\t{flattenPrgm} pass, which passes through the program in reverse order, 
+The next several passes convert our front-end grammar to a back-end grammar,
+shown in Figure \ref{fig:back-syntax}, which closely resembles the features of
+the C code that we subsequently generate. Most significantly, a program now
+consists of a list of \i{Block}s of code, each of which belongs to a \i{Thread},
+and a list of \i{Thread}s. \i{Expr}s remain unchanged from the front-end, while
+all control flow is delegated to the \i{Tail} position of a \i{Block} of code. 
 
-is to compile C, 
+As the grammar makes clear, the most important task for our back-end is to
+convert our linear front-end code into a collection of states appropriate for an
+event loop. This occurs in our \t{flattenPrgm} pass, which passes through the
+program in reverse order with a \t{RWS} monad, converting it to uniquely-named
+blocks whose only control-flow consists of tail-position jumps to other block
+labels. Here, the \t{State} maintains the next block number, the \t{Writer}
+collects lists of \i{Block}s and \i{Thread}s, and the \t{Reader} maintains the
+current thread number (defined as the first block in the current thread).
 
-It's important that the only blocking operations happen in the main loop
+As an illustrative example, consider encountering an \b{If} statement in our
+backwards pass, where we have access to the translation of the later statements,
+as well as the earlier statements. Morally, we would like to translate this to a
+conditional jump to the translation of either the first or second arm, each of
+which is terminated by a jump to the later statements. (Note that
+\t{flattenPrgm} leaves all optimization to the next pass.)
 
-We separate 
+We package up the later statements in a new block, and then translate the
+preceding statements, terminated by a tail-position conditional \b{If}. We also
+translate each arm of the original \b{If}, terminated by a tail-position
+\b{Goto} to the block containing the later statements. Importantly, all three of
+these recursive translations may generate new blocks, which will be collected
+automatically by the \t{Writer} monad.
 
-Threads are separated and replaced by labels
+Because blocking I/O may only happen in the main loop, we also terminate a block
+after any blocking I/O call, by inserting a \b{GotoWait} to the block containing
+the later statements. \b{GotoWait} is identical to \b{Goto} except to signal to
+later passes that the thread \emph{must} yield to the main loop at this
+location, and thus the goto must not be optimized away.
 
 This pass generates a correct state machine, albeit one which contains many
 blocks with only tail-position jumps. We follow it up with the \t{optimizeJumps}
@@ -337,12 +362,14 @@ variables which are only used in same block as their declaration need not be
 retained outside that block. We want to minimize the number of thread-local
 variables, because this directly impacts the memory overhead of each thread.
 
-From this point, the path to C code is fairly straightforward. For each thread,
-we generate a \t{struct} \t{thread$n$\_t} declaration containing a \t{thread\_t}
-struct with generic thread control information, followed by all thread-local
-variables. Each block is translated to a function taking as argument a
-\t{thread\_t} passed in from the main loop. It casts this to the \t{struct} type
-for its thread in order to access thread-local variables.
+From this point, the path to C code is fairly straightforward. Concretely, we
+transform our back-end grammar to the AST provided by the Language.C package,
+which we then output (as C source) to a file. For each thread, we generate a
+\t{struct} \t{thread$n$\_t} declaration containing a \t{thread\_t} struct with
+generic thread control information, followed by all thread-local variables. Each
+block is translated to a function taking as argument a \t{thread\_t} passed in
+from the main loop. It casts this to the \t{struct} type for its thread in order
+to access thread-local variables.
 
 \i{Stmt}s are translated straightforwardly; threads are spawned by allocating a
 new \t{struct} for the corresponding thread, setting its continuation to the
