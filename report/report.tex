@@ -26,11 +26,12 @@
 \maketitle
 
 \begin{abstract}
-We present He-Man, a Haskell compiled, embedded, domain specific
-language for building scalable network applications in a natural,
-straight-line manner while still emitting efficient event-loop based
-code. He-Man programs are compact and measurements indicate that it
-performs acceptably. 
+We present He-Man, a compiled, embedded, domain specific language in Haskell for
+building scalable network applications in a natural, straight-line manner while
+still producing efficient event loop-based code. He-Man programs are compact and
+measurements indicate that it performs acceptably. Our implementation is
+available at
+\url{https://github.com/msullivan/networks-project}.
 \end{abstract}
 
 \section{Introduction}
@@ -47,7 +48,7 @@ within each thread. This incurs frequent and expensive context switches at the
 operating system level; because the threads have identical code and little
 private data, this approach is unnecessary and does not scale.
 
-An improvement is to write multithreaded code, in which each thread serves
+An improvement is to write multithreaded code in which each thread serves
 multiple clients. This is the most popular approach, and is utilized in the
 Apache HTTP server \cite{Apache}.
 
@@ -142,12 +143,15 @@ are able to perform it automatically in the He-Man back-end.
 
 \section{Implementation}
 
+The latest version of He-Man can be found at
+\url{https://github.com/msullivan/networks-project}.
+
 \subsection{Front-end}
 
 The underlying abstract syntax for the front-end He-Man language is a
-fairly conventional imperative, statement based, first order language,
+fairly conventional imperative, statement-based, first-order language,
 shown in Figure \ref{fig:front-syntax}. The notable constructs are
-\b{Spawn}, which creates a new thread that takes a list of arguments
+\b{Spawn}, creating a new thread, which takes a list of arguments
 and launches the associated code with those arguments available to it,
 and \b{Wait}, which takes an event expression as an argument and
 blocks until the event has ``completed''. Note that \b{Call} is for
@@ -158,7 +162,7 @@ Since writing programs using the abstract syntax would be highly
 inconvenient, we provide a monadic library for writing He-Man
 programs, which allows us to leverage Haskell's do notation to write
 He-Man programs using convenient imperative syntax. In this way, we
-are taking advantage of monads being ``programmable semi-colons''.
+are taking advantage of monads as ``programmable semicolons''.
 
 We define the \t{Prog} monad, which contains a \t{State} monad used to
 maintain a counter for generating unique variable names and a
@@ -179,14 +183,13 @@ result of a call to it, and then returns the variable. Then,
 ``declaring'' a foreign function consists of writing a convenient
 wrapper function that invokes the \b{Call} wrapper.
 
-At the expression level, \t{Expr} is an instance of the \t{Num} type
-class so that numeric literals and operations can be used in He-Man
+At the expression level, \t{Expr} is an instance of the \t{Num} typeclass 
+so that numeric literals and operations can be used in He-Man
 syntax. We also provide infix operators for other useful operations on
-expressions, some of them with mildly awkward names, since the good
-names were already taken by a function with the wrong type.
+expressions, some of them with mildly awkward names to avoid name conflicts.
 
-The result of all of this is that He-Man code can be written in a
-fairly natural style, as shown in Figure \ref{fig:code-ex}.
+As a result, He-Man code can be written in a fairly natural style with little
+need for normal Haskell code, as shown in Figure \ref{fig:code-ex}.
 
 Although the He-Man target language does not support defining
 functions, code modularity and reuse is easily supported while writing
@@ -202,11 +205,9 @@ blocking network operations. \t{do\_nb\_action} takes an event
 can return \t{EAGAIN} and produces an action that generates code to
 simulate a blocking network operation. This allows us to describe how
 to simulate blocking I/O in a generic way, and then invoke it to
-create our concrete wrappers.
-(\t{.=.} is a wrapper for
-\b{Assign} that takes a \t{Prog Expr} as its second argument and the
-\t{sock\_*} functions invoke \b{Call} wrappers on the appropriate
-network calls).
+create our concrete wrappers. (\t{.=.} is a wrapper for \b{Assign} 
+that takes a \t{Prog Expr} as its second argument and the \t{sock\_*} 
+functions invoke \b{Call} wrappers on the appropriate network calls.)
 
 \begin{figure}[ht]
 \centering
@@ -274,10 +275,9 @@ do_read (fd, e) buf size =
 do_write (fd, e) buf size =
   do_nb_action e (sock_write fd buf size)
 \end{smallverbatim}
-\caption{Implementation of ``blocking'' network calls}
+\caption{Implementation of ``blocking'' network calls.}
 \label{fig:generic}
 \end{figure}
-
 
 \subsection{Back-end}
 
@@ -316,9 +316,9 @@ Threads are separated and replaced by labels
 
 This pass generates a correct state machine, albeit one which contains many
 blocks with only tail-position jumps. We follow it up with the \t{optimizeJumps}
-pass, which removes these empty blocks, redirecting all \t{Goto}s to their
-ultimate destinations, and allowing nested \t{If}s in tail position. Nested
-\t{If}s occur frequently in generated code, for example, immediately before an
+pass, which removes these empty blocks, redirecting all \b{Goto}s to their
+ultimate destinations, and allowing nested \b{If}s in tail position. Nested
+\b{If}s occur frequently in generated code, for example, immediately before an
 \t{if} statement at the end of a \t{while} loop, when the code might next jump
 inside the \t{if} statement, to the top of the \t{while} loop, or after the
 \t{while} loop, depending on multiple tests. Although this pass is, strictly
@@ -327,16 +327,15 @@ speaking, an optimization, it is critical for obtaining high-quality output.
 At this point, the program's control flow is correct, but many blocks will
 contain uses of variables which have been declared in previous blocks. The
 \t{collectFrees} pass traverses each block, collecting the variables used but
-not declared in each block. (Recall that our front-end ensures that a variable
-is only ever declared in one location, so there is no ambiguity.) The local
-variables of each thread are the union of the used-not-declared variables in
-each of its blocks. We save this list of local variables in the appropriate
-\i{Thread} container.
+not declared in each block. (Our front-end ensures that a variable is only ever
+declared in one location, so there is no ambiguity.) The local variables of each
+thread are the union of the used-not-declared variables in each of its blocks.
+We save this list of local variables in the appropriate \i{Thread} container.
 
 Note that we could simply mark all declared variables as thread-local, but
 variables which are only used in same block as their declaration need not be
-stored thread-locally. We want to minimize the number of thread-local variables,
-because this directly impacts the memory overhead of each thread.
+retained outside that block. We want to minimize the number of thread-local
+variables, because this directly impacts the memory overhead of each thread.
 
 From this point, the path to C code is fairly straightforward. For each thread,
 we generate a \t{struct} \t{thread$n$\_t} declaration containing a \t{thread\_t}
@@ -345,10 +344,10 @@ variables. Each block is translated to a function taking as argument a
 \t{thread\_t} passed in from the main loop. It casts this to the \t{struct} type
 for its thread in order to access thread-local variables.
 
-\t{Stmt}s are translated straightforwardly; threads are spawned by allocating a
+\i{Stmt}s are translated straightforwardly; threads are spawned by allocating a
 new \t{struct} for the corresponding thread, setting its continuation to the
 first block in the thread, and adding it to the list of runnable threads.
-\t{Expr}s and \t{Tail}s are similarly straightforward; variables in the thread
+\i{Expr}s and \i{Tail}s are similarly straightforward; variables in the thread
 \t{struct} must be replaced by references to their thread-local value, while
 other variables are guaranteed to be block-local. Finally, we must also generate
 a \t{main} function which spawns the first thread and jumps to the main loop.
@@ -376,13 +375,13 @@ runqueue.
 
 The He-Man runtime main loop is very simple, then: it loops
 indefinitely, and on each iteration it removes the thread at the head
-of the runqueue (if it exists) and runs it, and polls for IO events.
+of the runqueue (if it exists) and runs it, and polls for I/O events.
 
 The runtime provides a blocking mechanism based on an event
 abstraction. To the runtime, an event consists of a pointer to a
 thread that is blocked on it and some arbitrary identifier (in
-practice the file descriptor). To create an event for use with
-nonblocking IO, an event is allocated, marked with the associated file
+practice, the file descriptor). To create an event for use with
+nonblocking I/O, an event is allocated, marked with the associated file
 descriptor, and a new edge-triggered \t{epoll} event is created for the
 file descriptor using \t{epoll\_ctl}, with the event structure as the
 associated pointer data.
@@ -392,10 +391,10 @@ having to adjust which we are waiting for at runtime, and because
 He-Man's programming model makes it easy to meet the requirement that
 blocking on a file descriptor is only done after an operation on the
 descriptor has returned \t{EAGAIN}.
-The actual polling for IO events is done by calling \t{epoll}. For each
-event that has been returned by epoll, if a thread is waiting on the
+The actual polling for I/O events is done by calling \t{epoll}. For each
+event that has been returned by \t{epoll}, if a thread is waiting on the
 event, the thread is added to the runqueue. If the the runqueue is
-empty, the call to epoll is blocking, otherwise it is called with a
+empty, the call to \t{epoll} is blocking, otherwise it is called with a
 timeout of zero seconds, to simply poll for events.
 
 The runtime also has support for Linux Kernel Asynchronous IO for file
@@ -417,7 +416,7 @@ written in as an event loop driven explicit state machine using the
 He-Man runtime. The C version, which is fairly tightly written, is 98
 lines of source, according to SLOCCount. It is fairly readable, but
 its structure is obscured by being split into states and the need to
-explicitly handle read and write returning EAGAIN and write returning
+explicitly handle read and write returning \t{EAGAIN} and write returning
 short. The state machine has a total of five states. The He-Man
 version is 33 lines long and is a very clear representation of the
 control flow of each individual thread. (Additionally, the He-Man
@@ -447,13 +446,13 @@ filename to serve. The entire server is 54 lines of He-Man haskell and
 complete enough to benchmark.
 
 Our benchmark measurements are taken using ab, the Apache HTTP server
-benchmarking tool. \cite{ApacheAB} Measurements were collected by
+benchmarking tool \cite{ApacheAB}. Measurements were collected by
 having a variable number of client threads request a file 100 times;
 the experiment was repeated with a 16 kilobyte file and a 128 kilobyte
-file. We ran the tests against both our He-Man http server and Apache
+file. We ran the tests against both our He-Man HTTP server and Apache
 2.2.20, installed with the default Ubuntu 11.10 settings, except for
 client, thread, and process limits being adjusted upwards. Since the
-He-Man runtime is currently only single threaded, we ran the Apache
+He-Man runtime is currently only single-threaded, we ran the Apache
 web server pinned to a single processor. Since the test repeatedly
 requests the same file, it will always be in the kernel's disk cache,
 and thus this test is not disk bound.
@@ -463,9 +462,8 @@ Thinkpad W520 with a quad core 2.3 GHz Intel Core i7-2820QM and 8
 gigabytes of RAM, and the client ran on a Lenovo Thinkpad T500 with a
 Intel Core 2 Duo and 8 gigabytes of RAM.  % XXX: client specs
 The machines were connected by a gigabit Ethernet link.
-
 Unfortunately, ab is not particularly scalable, so we had trouble
-testing with more clients than 500.
+testing with more than 500 clients.
 
 Figure \ref{fig:graph128} compares our server to Apache for a 128 KB
 file. Our server performs nearly identically to Apache on this load.
@@ -476,19 +474,18 @@ connection setup begins to dominate, and connection setup in He-Man
 consists of a few memory allocations whereas connection setup under
 Apache may require spawning new OS level threads.
 
-\begin{figure*}[!htb]
-	\centering
-	\includegraphics[width=0.9\textwidth]{128kb_graph.png}
-	\caption{Web server benchmark, 128kb file}
-	\label{fig:graph128}
+\begin{figure*}[!ht]
+\centering
+\includegraphics[width=0.9\textwidth]{128kb_graph.png}
+\caption{Web server benchmark, 128 KB file.}
+\label{fig:graph128}
 \end{figure*}
-\begin{figure*}[!htb]
-	\centering
-	\includegraphics[width=0.9\textwidth]{16kb_graph.png}
-	\caption{Web server benchmark, 16kb file}
-	\label{fig:graph16}
+\begin{figure*}[!ht]
+\centering
+\includegraphics[width=0.9\textwidth]{16kb_graph.png}
+\caption{Web server benchmark, 16 KB file.}
+\label{fig:graph16}
 \end{figure*}
-
 
 \subsection{Memory Overhead}
 
@@ -499,8 +496,8 @@ and list heads and tails for lists of the events being waited on,
 events owned by the thread, and buffers owned by the thread (the
 latter two are so that we can automatically reclaim these resources
 when the thread exits). On a 64-bit system, the total overhead comes
-out to 88 bytes, and could easily be reduced further (e.g. by using
-singly linked lists).  For comparison, the default thread stack size
+out to 88 bytes, and could easily be reduced further (e.g., by using
+singly-linked lists).  For comparison, the default thread stack size
 under NPTL on Linux is 2 megabytes.
 
 % see how many threads we can spawn with Memory.hs

@@ -1,1 +1,9 @@
-HeMan: Haskell Event Manager, Apropos Networking
+He-Man: Haskell Event Manager, Apropos Networking.
+
+To test He-Man in GHC, load src/Http.hs or src/Echo.hs and type in:
+
+compile "output_filename.c" main_loop
+
+This will compile the program to output_filename.c, which can be passed to a C
+compiler and linked against the files in the src/rt directory. (A Makefile is
+available in src/rt.)
