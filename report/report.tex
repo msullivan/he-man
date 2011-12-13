@@ -2,6 +2,8 @@
 \usepackage[colorlinks=true,linkcolor=black,urlcolor=black,citecolor=black]%
 {hyperref}
 \usepackage{graphicx}
+\usepackage{verbatim}
+\newenvironment{smallverbatim}{\endgraf\small\verbatim}{\endverbatim} 
 \renewcommand{\t}{\texttt}
 \renewcommand{\b}{\textbf}
 \renewcommand{\i}{\textit}
@@ -138,6 +140,53 @@ are able to perform it automatically in the He-Man back-end.
 
 \subsection{Front-end}
 
+The underlying abstract syntax for the front-end He-Man language is a
+fairly conventional imperative, statement based, first order language,
+shown in Figure \ref{fig:front-syntax}. The notable constructs are
+\b{Spawn}, which creates a new thread that takes a list of arguments
+and launches the associated code with those arguments available to it,
+and \b{Wait}, which takes an event expression as an argument and
+blocks until the event has ``completed''. Note that \b{Call} is for
+calling foreign functions; He-Man does not have its own notion of
+function.
+
+Since writing programs using the abstract syntax would be highly
+inconvenient, we provide a monadic library for writing He-Man
+programs, which allows us to leverage Haskell's do notation to write
+He-Man programs using convenient imperative syntax. In this way, we
+are taking advantage of monads being ``programmable semi-colons''.
+
+We define the \t{Prog} monad, which contains a \t{State} monad used to
+maintain a counter for generating unique variable names and a
+\t{Writer} monad that is used to build up a list of statements. We
+then provide \t{Prog} wrappers for statements that add the statement
+to the list of statements being built up by the \t{Writer}. The
+wrappers for \b{Spawn}, \b{Assign}, \b{Wait}, and \b{Exit} simply take
+the obvious arguments, construct a \t{Stmt} and add it to the writer
+list. The \b{Assign} wrapper is an infix operator, and is named
+``.=''. The wrappers for \b{While} and \b{If} take values in \t{Prog}
+instead of statement lists, and run the \t{Writer} to extract the
+lists of statements. The monadic wrapper for \b{Decl} declares a
+variable (with a name made unique by appending a unique number) and
+then returns the \t{Expr} that references the declared variables. This
+makes declaring and using variables very natural. We also provide a
+wrapper for \b{Call} that declares a fresh variable, assigns the
+result of a call to it, and then returns the variable. Then,
+``declaring'' a foreign function consists of writing a convenient
+wrapper function that invokes the \b{Call} wrapper.
+
+At the expression level, \t{Expr} is an instance of the \t{Num} type
+class so that numeric literals and operations can be used in He-Man
+syntax. We also provide infix operators for other useful operations on
+expressions, some of them with mildly awkward names, since the good
+names were already taken by a function with the wrong type.
+
+The result of all of this is that He-Man code can be written in a
+fairly natural style, as shown in Figure \ref{fig:code-ex}.
+
+%We also provide an \b{Assign} wrapper that takes a \t{Prog Expr} as its argument
+
+
 \begin{figure}[ht]
 \centering
 \bnf{
@@ -165,7 +214,26 @@ are able to perform it automatically in the He-Man back-end.
    $\mid$ \b{Buffer} $\mid$ \b{Event}}
 }
 \caption{Front-end grammar.}
+\label{fig:front-syntax}
 \end{figure}
+
+\begin{figure}[ht]
+\centering
+\begin{smallverbatim}
+child_code = declare_thread [("child_fd", Int)] $
+  \[child_fd] -> do
+  ev <- setup_connection child_fd
+  buf <- new_buf bufsize
+  while 1 $ do
+    amt_read <- do_read ev buf bufsize
+    ifthen (amt_read .== 0) exit
+    amt_written <- full_write ev buf amt_read
+    ifthen (amt_written .< amt_read) exit
+\end{smallverbatim}
+\caption{He-Man example from echo server.}
+\label{fig:code-ex}
+\end{figure}
+
 
 \subsection{Back-end}
 
