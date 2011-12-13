@@ -378,7 +378,7 @@ and thus this test is not disk bound.
 For our experiments, the server ran Linux kernel 3.0.0 on a Lenovo
 Thinkpad W520 with a quad core 2.3 GHz Intel Core i7-2820QM and 8
 gigabytes of RAM, and the client ran on a Lenovo Thinkpad T500 with a
-Intel Core 2 Duo and 8 gigabtyes of RAM.  % XXX: client specs
+Intel Core 2 Duo and 8 gigabytes of RAM.  % XXX: client specs
 The machines were connected by a gigabit Ethernet link.
 
 Unfortunately, ab is not particularly scalable, so we had trouble
@@ -420,23 +420,33 @@ out to 88 bytes, and could easily be reduced further (e.g. by using
 singly linked lists).  For comparison, the default thread stack size
 under NPTL on Linux is 2 megabytes.
 
-say something about Memory.hs??
-
+% see how many threads we can spawn with Memory.hs
 
 \section{Future work}
 
-multithreaded runtime
+We will continue our work on He-Man, and hope to submit it to a programming
+languages conference such as ICFP. We plan to expand the language with the
+ability to declare functions and make non-external function calls within a
+thread. This will make code simpler and shorter by allowing the programmer to
+abstract away common functionality like read and write loops.
 
-write a better allocator
+In the runtime, our current thread \t{struct}s are larger than necessary.
+Because the runtime allocates a \t{struct} on every thread spawn, we should
+replace our \t{malloc} calls with calls to a custom slab allocator. We also plan
+on writing a multithreaded runtime, to allow servicing multiple threads' ready
+events simultaneously. Because our threads don't interact, this does not require
+exposing any locking to the programmer.
 
-less space per thread
+The backend can perform more aggressive optimization on the code blocks. In
+particular, we currently do not allow any control flow except at tail position;
+if both branches of an \t{if} are non-blocking, we should avoid translating it
+into multiple blocks, requiring a yield to the main loop. It should also be
+possible to gather interesting output from the backend, like a graphical
+representation of the generated state machine, for documentation purposes.
 
-decide when to allow internal if statements
-
-We will additionally output a graphical representation of this underlying state
-machine.
-
-observable sharing (?)
+We also hope to implement observable sharing, as in \cite{Gill}, to allow the
+same thread to have distinct spawn sites without code duplication. This does not
+add inefficiency, but does increase the size of our output code. 
 
 \section{Conclusions}
 
