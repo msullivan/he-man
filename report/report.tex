@@ -184,8 +184,25 @@ names were already taken by a function with the wrong type.
 The result of all of this is that He-Man code can be written in a
 fairly natural style, as shown in Figure \ref{fig:code-ex}.
 
-%We also provide an \b{Assign} wrapper that takes a \t{Prog Expr} as its argument
+Although the He-Man target language does not support defining
+functions, code modularity and reuse is easily supported while writing
+He-Man code by defining Haskell functions that produce values in
+\t{Prog}. When invoked, the code of these meta-level ``functions'' is
+included directly at the call-site. This is a very powerful tool, but
+can potentially result in code size explosion if used carelessly.
 
+As an example of the power that Haskell and the monadic style gives
+us, Figure \ref{fig:generic} shows our library routines for simulating
+blocking network operations. \t{do\_nb\_action} takes an event
+\t{Expr} and a \t{Prog Expr} action representing a network call that
+can return \t{EAGAIN} and produces an action that generates code to
+simulate a blocking network operation. This allows us to describe how
+to simulate blocking I/O in a generic way, and then invoke it to
+create our concrete wrappers.
+(\t{.=.} is a wrapper for
+\b{Assign} that takes a \t{Prog Expr} as its second argument and the
+\t{sock\_*} functions invoke \b{Call} wrappers on the appropriate
+network calls).
 
 \begin{figure}[ht]
 \centering
@@ -232,6 +249,29 @@ child_code = declare_thread [("child_fd", Int)] $
 \end{smallverbatim}
 \caption{He-Man example from echo server.}
 \label{fig:code-ex}
+\end{figure}
+
+\begin{figure}[ht]
+\centering
+\begin{smallverbatim}
+do_nb_action :: Expr -> Prog Expr -> Prog Expr
+do_nb_action e action = do
+  res <- action
+  ifthen (res .< 0) $ do
+    while (res .< 0) $ do
+      wait e
+      res .=. action
+  return res
+
+accept (fd, e) =
+  do_nb_action e (sock_accept fd)
+do_read (fd, e) buf size =
+  do_nb_action e (sock_read fd buf size)
+do_write (fd, e) buf size =
+  do_nb_action e (sock_write fd buf size)
+\end{smallverbatim}
+\caption{Implementation of ``blocking'' network calls}
+\label{fig:generic}
 \end{figure}
 
 
