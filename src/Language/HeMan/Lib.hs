@@ -56,7 +56,7 @@ kO_RDONLY = Constant "O_RDONLY"
 kEAGAIN = Constant "EAGAIN"
 
 
-do_nb_action :: Expr -> Prog Expr -> Prog Expr
+do_nb_action :: DExpr -> Prog DExpr -> Prog DExpr
 do_nb_action e action = do
   res <- action
   ifE' (res .< 0) $ do

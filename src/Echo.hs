@@ -6,13 +6,13 @@ q_limit = 1024
 port = 2023
 bufsize = 4096
 
-setup_connection :: Expr -> Prog (Expr, Expr)
+setup_connection :: DExpr -> Prog (DExpr, DExpr)
 setup_connection fd = do
   make_nb fd
   e <- mk_nb_event fd kEVENT_RDWR
   return (fd, e)
 
-setup_listener :: Expr -> Prog (Expr, Expr)
+setup_listener :: DExpr -> Prog (DExpr, DExpr)
 setup_listener port = do
   fd <- socket kAF_INET kSOCK_STREAM 0
   set_sock_reuse fd

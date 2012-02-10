@@ -4,7 +4,7 @@ module Language.HeMan.Backend
   where
 
 import qualified Language.HeMan.Syntax as Front
-  (Stmt(..), Expr(..), VDecl, Prim(..), Block, Var)
+  (Stmt(..), DExpr(..), VDecl, Prim(..), Block, Var)
 import Control.Monad.RWS
 import Control.Monad.Writer
 import qualified Data.Set as Set
@@ -17,13 +17,13 @@ type ThreadName = Label
 type Block = (Label, ThreadName, [Stmt], Tail)
 type Thread = (ThreadName, [Front.VDecl])
 
-data Stmt = Decl Front.VDecl Front.Expr
-          | Assign Front.Expr Front.Expr
-          | Exp Front.Expr
-          | Spawn Label [(Front.VDecl, Front.Expr)]
+data Stmt = Decl Front.VDecl Front.DExpr
+          | Assign Front.DExpr Front.DExpr
+          | Exp Front.DExpr
+          | Spawn Label [(Front.VDecl, Front.DExpr)]
           deriving (Eq, Ord, Show)
 
-data Tail = If Front.Expr Tail Tail
+data Tail = If Front.DExpr Tail Tail
           | Goto Label
           | GotoWait Label
           | Exit
