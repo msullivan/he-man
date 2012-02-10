@@ -6,13 +6,13 @@ q_limit = 1024
 port = 2023
 bufsize = 4096
 
-setup_connection :: DExpr -> Prog (DExpr, DExpr)
+setup_connection :: IntE -> Prog (IntE, EventE)
 setup_connection fd = do
   make_nb fd
   e <- mk_nb_event fd kEVENT_RDWR
   return (fd, e)
 
-setup_listener :: DExpr -> Prog (DExpr, DExpr)
+setup_listener :: IntE -> Prog (IntE, EventE)
 setup_listener port = do
   fd <- socket kAF_INET kSOCK_STREAM 0
   set_sock_reuse fd
@@ -23,7 +23,7 @@ setup_listener port = do
   return (fd, e)
 
 child_code = declare_thread [("child_fd", Int)] $
-  \[child_fd] -> do
+  \child_fd -> do
   ev <- setup_connection child_fd
   buf <- new_buf bufsize
   while 1 $ do
@@ -36,5 +36,5 @@ main_loop = do
   ev <- setup_listener port
   while 1 $ do
     fd' <- accept ev
-    spawn child_code [fd']
+    spawn child_code fd'
 

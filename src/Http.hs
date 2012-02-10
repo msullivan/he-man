@@ -6,18 +6,19 @@ q_limit = 1024
 port = 8080
 bufsize = 4096*4
 
+http_parse :: BufferE -> IntE -> Prog IntE
 http_parse buf len =
-  callName "parse_result" (CFn "http_parse") Int [buf, len]
+  callName "parse_result" (CFn "http_parse") Int (buf, len)
 
 response_header = "HTTP/1.0 200 OK\r\n\r\n"
 
-setup_connection :: DExpr -> Prog (DExpr, DExpr)
+setup_connection :: IntE -> Prog (IntE, EventE)
 setup_connection fd = do
   make_nb fd
   e <- mk_nb_event fd kEVENT_RDWR
   return (fd, e)
 
-setup_listener :: DExpr -> Prog (DExpr, DExpr)
+setup_listener :: IntE -> Prog (IntE, EventE)
 setup_listener port = do
   fd <- socket kAF_INET kSOCK_STREAM 0
   set_sock_reuse fd  
@@ -38,7 +39,7 @@ parse_request buf ev = do
   return parse_result
 
 child_code = declare_thread [("child_fd", Int)] $
-  \[child_fd] -> do
+  \child_fd -> do
   ev <- setup_connection child_fd
   buf <- new_buf (bufsize+1) -- pfbbt.
   parse_result <- parse_request buf ev
@@ -49,8 +50,8 @@ child_code = declare_thread [("child_fd", Int)] $
   ifE' (file_fd .< 0) exit
   let cleanup = close file_fd >> exit
 
-  let hdr_length = NumLit $ toInteger $ length response_header
-  header <- var "output_header" String (StringLit response_header)
+  let hdr_length = num $ length response_header
+  header <- var "output_header" Buffer (stringLit response_header)
   amount_written <- full_write ev header hdr_length
   ifE' (amount_written .< hdr_length) cleanup
   
@@ -65,4 +66,4 @@ main_loop = do
   ev <- setup_listener port
   while 1 $ do
     fd' <- accept ev
-    spawn child_code [fd']
+    spawn child_code fd'

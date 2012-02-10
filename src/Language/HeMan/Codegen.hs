@@ -116,7 +116,6 @@ translateType t =
     Bool -> (cBool,[])
     FD -> (cInt,[])
     Event -> (cType "event_t",[cPtr])
-    String -> (cChar,[cPtr])
     Buffer -> (cChar,[cPtr])
 
 --}}}

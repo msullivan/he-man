@@ -1,6 +1,10 @@
+{-#LANGUAGE EmptyDataDecls, FlexibleInstances #-}
+
 module Language.HeMan.Syntax where
 
 import Control.Monad.RWS
+
+
 
 --{{{ Front-end language
 
@@ -19,7 +23,7 @@ data Stmt = Decl VDecl DExpr
           | Exit
           deriving (Eq, Ord, Show)
 
-data Type = Int | Bool | String | FD | Buffer | Event -- | ThreadT
+data Type = Int | Bool | FD | Buffer | Event -- | ThreadT
           deriving (Eq, Ord, Show)
 data DExpr = Call Prim [DExpr]
           | Arith ArithOp DExpr DExpr
@@ -31,6 +35,7 @@ data DExpr = Call Prim [DExpr]
           | Var Var
           | CurThread
           deriving (Eq, Ord, Show)
+
 data ArithOp = Plus | Times | Minus | Div | Mod
              | And | Or | Xor
              | Rsh | Lsh
@@ -42,14 +47,100 @@ data RelnOp = Eq | Less | Greater -- more
 data Prim = CFn String
           deriving (Eq, Ord, Show)
 
-instance Num DExpr where
-  fromInteger = NumLit
-  (+) = Arith Plus
-  (-) = Arith Minus
-  (*) = Arith Times
-  negate = ArithUnop Negate
-  abs = error "full of lies"
-  signum = error "full of lies"
+-- Now for some phantom type bullshit
+
+newtype Expr a = E DExpr
+               deriving (Eq, Ord, Show)
+
+data FD
+data Buffer
+data Event
+data Thread
+
+type IntE = Expr Int
+type BoolE = Expr Bool
+type BufferE = Expr Buffer
+type EventE = Expr Event
+
+-- Lift functions of DExprs to ones over Exprs
+typ1 :: (DExpr -> DExpr) -> (Expr a -> Expr b)
+typ1 f (E e1) = E (f e1)
+typ2 :: (DExpr -> DExpr -> DExpr) -> (Expr a -> Expr b -> Expr c)
+typ2 f (E e1) (E e2) = E (f e1 e2)
+
+class ArgPacket a where
+  toDExprList :: a -> [DExpr]
+  makeVars :: [String] -> a
+
+instance ArgPacket (Expr a) where
+  toDExprList (E x) = [x]
+  makeVars [x] = E $ Var x
+instance ArgPacket (Expr a, Expr b) where
+  toDExprList (E x1, E x2) = [x1, x2]
+  makeVars [x1, x2] = (E $ Var x1, E $ Var x2)
+instance ArgPacket (Expr a, Expr b, Expr c) where
+  toDExprList (E x1, E x2, E x3) = [x1, x2, x3]
+  makeVars [x1, x2, x3] = (E $ Var x1, E $ Var x2, E $ Var x3)
+instance ArgPacket (Expr a, Expr b, Expr c, Expr d) where
+  toDExprList (E x1, E x2, E x3, E x4) = [x1, x2, x3, x4]
+  makeVars [x1, x2, x3, x4] = (E $ Var x1, E $ Var x2, E $ Var x3, E $ Var x4)
+
+infixr 2 .||
+infixr 3 .&&
+infix  4 .==, .<, .> --, ./=, .<=, .>=
+infixl 6 +*
+
+(.<) :: IntE -> IntE -> BoolE
+(.<) = typ2 $ RelnOp Less
+(.>) :: IntE -> IntE -> BoolE
+(.>) = typ2 $ RelnOp Greater
+(.==) :: Expr a -> Expr a -> BoolE
+(.==) = typ2 $ RelnOp Eq
+(.&&) :: BoolE -> BoolE -> BoolE
+(.&&) = typ2 $ Arith And
+(.||) :: BoolE -> BoolE -> BoolE
+(.||) = typ2 $ Arith Or
+
+
+instance Num (Expr Int) where
+  fromInteger = E . NumLit
+  (+) = typ2 $ Arith Plus
+  (-) = typ2 $ Arith Minus
+  (*) = typ2 $ Arith Times
+  negate = typ1 $ ArithUnop Negate
+  abs = error "abs unimplemented"
+  signum = error "signum unimplemented"
+-- This is /super/ dubious. We want to be able to write "while 1", so
+-- we overload fromInteger.  We /could/ try to give sensible meanings
+-- to the arithmetic operations, but we really don't want to encourage
+-- that sort of behavior.
+instance Num (Expr Bool) where
+  fromInteger = E . NumLit
+  (+) = error "trying to use Num things on BoolE: don't do that"
+  (-) = error "trying to use Num things on BoolE: don't do that"
+  (*) = error "trying to use Num things on BoolE: don't do that"
+  negate = error "trying to use Num things on BoolE: don't do that"
+  abs = error "trying to use Num things on BoolE: don't do that"
+  signum = error "trying to use Num things on BoolE: don't do that"
+
+
+
+-- Pointer arithmetic
+(+*) :: BufferE -> IntE -> BufferE
+(+*) = typ2 $ Arith Plus
+
+num :: Int -> IntE
+num = E . NumLit . toInteger
+
+curThread :: Expr Thread
+curThread = E CurThread
+
+constant :: String -> IntE
+constant = E . Constant
+
+stringLit :: String -> BufferE
+stringLit = E . StringLit
+
 
 --}}}
 --{{{ Monadic sugar
@@ -72,20 +163,21 @@ add :: Stmt -> Prog ()
 add s = tell [s]
 
 --- Wrappers around all of the important language features
-var :: String -> Type -> DExpr -> Prog DExpr
-var name t e = do
+-- Is there a way to do type checking here...?
+var :: String -> Type -> Expr a -> Prog (Expr a)
+var name t (E e) = do
   v <- freshName
   let name' = name ++ "_" ++ show v
   add $ Decl (name', t) e
-  return $ Var name'
+  return $ E $ Var name'
 
 infixl 0 .=
 infixl 0 .=.
-(.=) :: DExpr -> DExpr -> Prog ()
-l .= r = do
+(.=) :: Expr a -> Expr a -> Prog ()
+(E l) .= (E r) = do
   add $ Assign l r
 
-(.=.) :: DExpr -> Prog DExpr -> Prog ()
+(.=.) :: Expr a -> Prog (Expr a) -> Prog ()
 l .=. r = do
   r' <- r
   l .= r'
@@ -93,48 +185,40 @@ l .=. r = do
 exit :: Prog ()
 exit = add Exit
 
-wait :: DExpr -> Prog ()
-wait = add . Wait
+wait :: EventE  -> Prog ()
+wait (E e) = add $ Wait e
 
-callName :: String -> Prim -> Type -> [DExpr] -> Prog DExpr
-callName name fn t args = var name t (Call fn args)
-
-call :: Prim -> Type -> [DExpr] -> Prog DExpr
-call fn t args = callName "tmp" fn t args
-
-spawn :: ThreadCode -> [DExpr] -> Prog ()
-spawn thread args = add $ Spawn thread args
+spawn :: ArgPacket a => ThreadCode -> a -> Prog ()
+spawn thread args = add $ Spawn thread (toDExprList args)
 
 extract :: Prog a -> Prog (a, [Stmt])
 extract m = censor (const []) (listen m)
 
-while :: DExpr -> Prog a -> Prog ()
-while e body = do
+while :: BoolE -> Prog a -> Prog ()
+while (E e) body = do
   (_, bodyStmts) <- extract body
   add $ While e bodyStmts
 
-ifE :: DExpr -> Prog a -> Prog b -> Prog ()
-ifE e thenBody elseBody = do
+ifE :: BoolE -> Prog a -> Prog b -> Prog ()
+ifE (E e) thenBody elseBody = do
   (_, thenStmts) <- extract thenBody
   (_, elseStmts) <- extract elseBody
   add $ If e thenStmts elseStmts
   
-ifE' :: DExpr -> Prog a -> Prog ()
+ifE' :: BoolE -> Prog a -> Prog ()
 ifE' e thenBody = ifE e thenBody (return ())
 
-infixr 2 .||
-infixr 3 .&&
-infix  4 .==, .<, .> --, ./=, .<=, .>=
 
-(.<) = RelnOp Less
-(.>) = RelnOp Greater
-(.==) = RelnOp Eq
-(.&&) = Arith And
-(.||) = Arith Or
+callName :: ArgPacket a => String -> Prim -> Type -> a -> Prog (Expr b)
+callName name fn t args = var name t (E $ Call fn (toDExprList args))
+
+call :: ArgPacket a => Prim -> Type -> a -> Prog (Expr b)
+call fn t args = callName "tmp" fn t args
+
 
 -- Helper to construct a ThreadCode - kind of annoying
-declare_thread :: [VDecl] -> ([DExpr] -> Prog ()) -> ThreadCode
+declare_thread :: ArgPacket a => [VDecl] -> (a -> Prog ()) -> ThreadCode
 declare_thread decls f = (decls, desugar prog)
-  where prog = f (map (Var . fst) decls)
+  where prog = f (makeVars (map fst decls))
 
 --}}}
