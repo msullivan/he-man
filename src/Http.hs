@@ -38,7 +38,7 @@ parse_request buf ev = do
     parse_result .=. http_parse buf request_size
   return parse_result
 
-child_code = declare_thread [("child_fd", Int)] $
+child_code = declare_thread [("child_fd", IInt)] $
   \child_fd -> do
   ev <- setup_connection child_fd
   buf <- new_buf (bufsize+1) -- pfbbt.

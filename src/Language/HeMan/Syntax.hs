@@ -1,17 +1,21 @@
-{-#LANGUAGE EmptyDataDecls, FlexibleInstances #-}
+{-#LANGUAGE GADTs, EmptyDataDecls, FlexibleInstances #-}
 
 module Language.HeMan.Syntax where
 
 import Control.Monad.RWS
 
-
-
 --{{{ Front-end language
 
 type Block = [Stmt]
 type Var = String
-type VDecl = (Var, Type)
+type VDecl = (Var, IType)
 type ThreadCode = ([VDecl], Block)
+
+-- Some dummy types for the phantom types
+data FD
+data Buffer
+data Event
+data Thread
 
 data Stmt = Decl VDecl DExpr
           | While DExpr Block
@@ -23,8 +27,26 @@ data Stmt = Decl VDecl DExpr
           | Exit
           deriving (Eq, Ord, Show)
 
-data Type = Int | Bool | FD | Buffer | Event -- | ThreadT
+data IType = IInt | IBool | IFD | IBuffer | IEvent -- | ThreadT
           deriving (Eq, Ord, Show)
+
+-- I think I should win an award for "worst reason to choose to use
+-- GADTs": I want types to stay constructors so they get syntax
+-- highlighted differently.
+data Type a where
+  Int :: Type Int
+  Bool :: Type Bool
+  FD :: Type FD
+  Buffer :: Type Buffer
+  Event :: Type Event
+
+mkIType :: Type a -> IType
+mkIType Int = IInt
+mkIType Bool = IBool
+mkIType FD = IFD
+mkIType Buffer = IBuffer
+mkIType Event = IEvent
+
 data DExpr = Call Prim [DExpr]
           | Arith ArithOp DExpr DExpr
           | ArithUnop ArithUnop DExpr
@@ -52,10 +74,6 @@ data Prim = CFn String
 newtype Expr a = E DExpr
                deriving (Eq, Ord, Show)
 
-data FD
-data Buffer
-data Event
-data Thread
 
 type IntE = Expr Int
 type BoolE = Expr Bool
@@ -164,11 +182,11 @@ add s = tell [s]
 
 --- Wrappers around all of the important language features
 -- Is there a way to do type checking here...?
-var :: String -> Type -> Expr a -> Prog (Expr a)
+var :: String -> Type a -> Expr a -> Prog (Expr a)
 var name t (E e) = do
   v <- freshName
   let name' = name ++ "_" ++ show v
-  add $ Decl (name', t) e
+  add $ Decl (name', mkIType t) e
   return $ E $ Var name'
 
 infixl 0 .=
@@ -209,10 +227,10 @@ ifE' :: BoolE -> Prog a -> Prog ()
 ifE' e thenBody = ifE e thenBody (return ())
 
 
-callName :: ArgPacket a => String -> Prim -> Type -> a -> Prog (Expr b)
+callName :: ArgPacket a => String -> Prim -> Type b -> a -> Prog (Expr b)
 callName name fn t args = var name t (E $ Call fn (toDExprList args))
 
-call :: ArgPacket a => Prim -> Type -> a -> Prog (Expr b)
+call :: ArgPacket a => Prim -> Type b -> a -> Prog (Expr b)
 call fn t args = callName "tmp" fn t args
 
 

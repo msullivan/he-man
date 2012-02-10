@@ -1,7 +1,7 @@
 module Language.HeMan.Codegen (codegen) where
 
 import Language.HeMan.Syntax
-  (Prim(..), ArithOp(..), ArithUnop(..), RelnOp(..), Type(..), DExpr(..))
+  (Prim(..), ArithOp(..), ArithUnop(..), RelnOp(..), IType(..), DExpr(..))
 import Language.HeMan.Backend
   (Block, Thread, Stmt(..), Tail(..))
 import Language.HeMan.CLib
@@ -112,11 +112,11 @@ translateTail vars tail =
 
 translateType t =
   case t of
-    Int -> (cInt,[])
-    Bool -> (cBool,[])
-    FD -> (cInt,[])
-    Event -> (cType "event_t",[cPtr])
-    Buffer -> (cChar,[cPtr])
+    IInt -> (cInt,[])
+    IBool -> (cBool,[])
+    IFD -> (cInt,[])
+    IEvent -> (cType "event_t",[cPtr])
+    IBuffer -> (cChar,[cPtr])
 
 --}}}
 --{{{ Operators
