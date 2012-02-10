@@ -76,6 +76,7 @@ newtype Expr a = E DExpr
 
 
 type IntE = Expr Int
+type FdE = Expr FD
 type BoolE = Expr Bool
 type BufferE = Expr Buffer
 type EventE = Expr Event
@@ -119,6 +120,8 @@ infixl 6 +*
 (.||) :: BoolE -> BoolE -> BoolE
 (.||) = typ2 $ Arith Or
 
+fd_is_failure :: FdE -> BoolE
+fd_is_failure (E fd) = (E fd) .< 0
 
 instance Num (Expr Int) where
   fromInteger = E . NumLit

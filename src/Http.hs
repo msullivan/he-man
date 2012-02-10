@@ -12,13 +12,13 @@ http_parse buf len =
 
 response_header = "HTTP/1.0 200 OK\r\n\r\n"
 
-setup_connection :: IntE -> Prog (IntE, EventE)
+setup_connection :: FdE -> Prog (FdE, EventE)
 setup_connection fd = do
   make_nb fd
   e <- mk_nb_event fd kEVENT_RDWR
   return (fd, e)
 
-setup_listener :: IntE -> Prog (IntE, EventE)
+setup_listener :: IntE -> Prog (FdE, EventE)
 setup_listener port = do
   fd <- socket kAF_INET kSOCK_STREAM 0
   set_sock_reuse fd  
@@ -47,7 +47,7 @@ child_code = declare_thread [("child_fd", IInt)] $
   ifE' (parse_result .> 1 .|| parse_result .< 0) exit
 
   file_fd <- open buf kO_RDONLY
-  ifE' (file_fd .< 0) exit
+  ifE' (fd_is_failure file_fd) exit
   let cleanup = close file_fd >> exit
 
   let hdr_length = num $ length response_header

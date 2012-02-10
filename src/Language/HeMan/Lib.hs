@@ -3,7 +3,7 @@ module Language.HeMan.Lib where
 import Language.HeMan.Syntax
 
 -- Coreish runtime functions
-mk_nb_event :: IntE -> IntE -> Prog EventE
+mk_nb_event :: FdE -> IntE -> Prog EventE
 mk_nb_event fd modes =
   callName "event" (CFn "mk_nb_event") Event (curThread, fd, modes)
 -- This is kind of lame
@@ -12,48 +12,48 @@ new_buf size =
   callName "buf" (CFn "new_buf") Buffer (curThread, size)
 
 -- Sugar for individual functions and whatnot
-socket :: IntE -> IntE -> IntE -> Prog IntE
+socket :: IntE -> IntE -> IntE -> Prog FdE
 socket domain typ protcol =
-  callName "sock_fd" (CFn "socket") Int (domain, typ, protcol)
+  callName "sock_fd" (CFn "socket") FD (domain, typ, protcol)
 
-set_sock_reuse :: IntE -> Prog IntE
+set_sock_reuse :: FdE -> Prog IntE
 set_sock_reuse fd = call (CFn "set_sock_reuse") Int (fd)
 
-make_nb :: IntE -> Prog IntE
+make_nb :: FdE -> Prog IntE
 make_nb fd = call (CFn "make_socket_non_blocking") Int (fd)
 
-sock_bind_v4 :: IntE -> IntE -> IntE -> Prog IntE
+sock_bind_v4 :: FdE -> IntE -> IntE -> Prog IntE
 sock_bind_v4 fd addr port =
   call (CFn "sock_bind_v4") Int (fd, addr, port)
 
-sock_listen :: IntE -> IntE -> Prog IntE
+sock_listen :: FdE -> IntE -> Prog IntE
 sock_listen fd q_limit =
   call (CFn "listen") Int (fd, q_limit)
 
-sock_accept :: IntE -> Prog IntE
+sock_accept :: FdE -> Prog IntE
 sock_accept fd =
   callName "accepted_fd" (CFn "accept") Int (fd, num 0, num 0)
 
-sock_read :: IntE -> BufferE -> IntE -> Prog IntE
+sock_read :: FdE -> BufferE -> IntE -> Prog IntE
 sock_read fd buf len =
   callName "amt_read" (CFn "read") Int (fd, buf, len)
 
-sock_write :: IntE -> BufferE -> IntE -> Prog IntE
+sock_write :: FdE -> BufferE -> IntE -> Prog IntE
 sock_write fd buf len =
   callName "amt_written" (CFn "write") Int (fd, buf, len)
 
-close :: IntE -> Prog IntE
+close :: FdE -> Prog IntE
 close fd =
   call (CFn "close") Int (fd)
 
-open :: BufferE -> IntE -> Prog IntE  
+open :: BufferE -> IntE -> Prog FdE
 open path flags =
-  call (CFn "open") Int (path, flags)
+  call (CFn "open") FD (path, flags)
 
-file_read :: IntE -> BufferE -> IntE -> Prog IntE
+file_read :: FdE -> BufferE -> IntE -> Prog IntE
 file_read fd buf len =
   callName "amt_read" (CFn "read") Int (fd, buf, len)
-file_write :: IntE -> BufferE -> IntE -> Prog IntE
+file_write :: FdE -> BufferE -> IntE -> Prog IntE
 file_write fd buf len =
   callName "amt_written" (CFn "write") Int (fd, buf, len)
 

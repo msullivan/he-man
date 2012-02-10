@@ -6,13 +6,13 @@ q_limit = 1024
 port = 2023
 bufsize = 4096
 
-setup_connection :: IntE -> Prog (IntE, EventE)
+setup_connection :: FdE -> Prog (FdE, EventE)
 setup_connection fd = do
   make_nb fd
   e <- mk_nb_event fd kEVENT_RDWR
   return (fd, e)
 
-setup_listener :: IntE -> Prog (IntE, EventE)
+setup_listener :: IntE -> Prog (FdE, EventE)
 setup_listener port = do
   fd <- socket kAF_INET kSOCK_STREAM 0
   set_sock_reuse fd
@@ -22,7 +22,7 @@ setup_listener port = do
   e <- mk_nb_event fd kEVENT_RD
   return (fd, e)
 
-child_code = declare_thread [("child_fd", IInt)] $
+child_code = declare_thread [("child_fd", IFD)] $
   \child_fd -> do
   ev <- setup_connection child_fd
   buf <- new_buf bufsize
