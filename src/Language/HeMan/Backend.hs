@@ -8,6 +8,7 @@ import qualified Language.HeMan.Syntax as Front
 import Control.Monad.RWS
 import Control.Monad.Writer
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 import Data.Maybe
 
 type Prgm = [Block]
@@ -31,6 +32,7 @@ data Tail = If Front.DExpr Tail Tail
 
 backend :: Front.Block -> ([Block],[Thread])
 backend = collectFrees . (mapFst optimizeJumps) . flattenPrgm
+--backend = collectFrees . flattenPrgm
 
 mapFst f (x,y) = (f x,y)
 
@@ -127,40 +129,66 @@ flattenStmt stmt bStmts aStmts tail =
 
 {- optimizeJumps removes unnecessary Gotos from the output of flattenPrgm. -}
 
-optimizeJumps bs = map (redirect ls) bs'
-  where (bs',ls) = optimize bs []
-        redirect ls (x,vs,ss,tail) = (x,vs,ss,walk tail ls)
+optimizeJumps bs = map (rewriteTail rs) bs'
+  where (_,rs,bs') = runRWS (mapM_ optimize bs) () Map.empty
+        rewriteTail rs (l,t,ss,tail) = (l,t,ss,simplifyTail [] $ walk tail rs)
 
-optimize [] xs = ([],xs)
-optimize (b:bs) ls =
-  let targets = map snd ls in
+type Optimizer = RWS () [Block] (Map.Map Tail Tail)
+
+addRedirect l l' =
+  do redirects <- get 
+     modify $ Map.insert l (walk l' redirects)
+
+optimize :: Block -> Optimizer ()
+optimize b = do
   case b of
-  (label,vs,[],_) | Goto label `elem` targets ->
-    let (bs',ls') = optimize bs ls in (b:bs',ls')
-  (label,vs,stmts,If (Front.NumLit 0) c a) ->
-    optimize ((label,vs,stmts,a):bs) ls
-  (label,vs,stmts,If e c a) | knownConstantExpr e ->
-    optimize ((label,vs,stmts,c):bs) ls
-  (0,_,_,_) -> let (bs',ls') = optimize bs ls in (b:bs',ls')
-  (label,vs,[],Goto g) ->
-    optimize bs ((Goto label,walk (Goto g) ls):ls)
-  (label,vs,[],Exit) ->
-    optimize bs ((Goto label,Exit):ls)
-  (label,vs,[],If e t t') ->
-    optimize bs ((Goto label,walk (If e t t') ls):ls)
-  _ -> let (bs',ls') = optimize bs ls in (b:bs',ls')
+    -- Simplify constant Ifs.
+    (l,t,ss,If (Front.NumLit 0) c a) -> optimize (l,t,ss,a)
+    (l,t,ss,If expr c a) | constantExpr expr -> optimize (l,t,ss,c)
+    -- Don't remove the empty head block of a thread.
+    (l,t,[],_) | l == t -> tell [b]
+    -- Remove and redirect empty blocks.
+    (l,t,[],Goto g) -> do
+      redirects <- get
+      let isLoop = (walk (Goto g) redirects == Goto l)
+      if isLoop then tell [b] else addRedirect (Goto l) (Goto g)
+    (l,t,[],If e c a) -> addRedirect (Goto l) (If e c a)
+    (l,t,[],Exit) -> addRedirect (Goto l) Exit
+    -- No optimizations to perform.
+    _ -> tell [b]
 
-walk x xs = case (x,lookup x xs) of
+walk x xs = case (x,Map.lookup x xs) of
   (_,Just (If e t t')) -> walk (If e (walk t xs) (walk t' xs)) xs
   (_,Just x') -> walk x' xs
   (If e t t',Nothing) -> If e (walk t xs) (walk t' xs)
   (_,Nothing) -> x
 
-knownConstantExpr expr =
+constantExpr expr =
   case expr of
     Front.NumLit n -> True
     Front.StringLit s -> True
     _ -> False
+
+simplifyTail _ t = t
+{-
+-- Simplify nested Ifs.
+simplifyTail env (If expr c a) =
+  case expr of
+    Front.ArithOp Front.And e e' -> simplifyTail env 
+    Front.RelnOp (x a b)
+    If expr 
+
+simplifyTail _ t = t
+
+newAssumption expr =
+  case expr of
+    Front.ArithOp Front.And e e' -> [e,e']
+    Front.ArithUnop Front.Not e ->
+      map negate (newAssumption e)
+  where negate (Eq 
+
+--impliedBy env x y
+-}
 
 --}}}
 --{{{ collectFrees
