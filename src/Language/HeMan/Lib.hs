@@ -30,9 +30,9 @@ sock_listen :: FdE -> IntE -> Prog IntE
 sock_listen fd q_limit =
   call (CFn "listen") Int (fd, q_limit)
 
-sock_accept :: FdE -> Prog IntE
+sock_accept :: FdE -> Prog FdE
 sock_accept fd =
-  callName "accepted_fd" (CFn "accept") Int (fd, num 0, num 0)
+  callName "accepted_fd" (CFn "accept") FD (fd, num 0, num 0)
 
 sock_read :: FdE -> BufferE -> IntE -> Prog IntE
 sock_read fd buf len =
@@ -79,11 +79,11 @@ kO_RDONLY = constant "O_RDONLY"
 kEAGAIN = constant "EAGAIN"
 
 
-do_nb_action :: Expr Event -> Prog IntE -> Prog IntE
+do_nb_action :: ExprFailable a => Expr Event -> Prog (Expr a) -> Prog (Expr a)
 do_nb_action e action = do
   res <- action
-  ifE' (res .< 0) $ do
-    while (res .< 0) $ do
+  ifE' (isFailure res) $ do
+    while (isFailure res) $ do
       wait e
       res .=. action
   return res

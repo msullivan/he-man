@@ -1,4 +1,5 @@
-{-#LANGUAGE GADTs, EmptyDataDecls, FlexibleInstances #-}
+{-#LANGUAGE GADTs, EmptyDataDecls, FlexibleInstances, TypeSynonymInstances,
+   MultiParamTypeClasses, FunctionalDependencies #-}
 
 module Language.HeMan.Syntax where
 
@@ -9,9 +10,13 @@ import Control.Monad.RWS
 type Block = [Stmt]
 type Var = String
 type VDecl = (Var, IType)
-type ThreadCode = ([VDecl], Block)
+type TVDecl a = (Var, Type a)
+type IThreadCode = ([VDecl], Block)
+
+data ThreadCode a = Thr IThreadCode
 
 -- Some dummy types for the phantom types
+
 data FD
 data Buffer
 data Event
@@ -20,7 +25,7 @@ data Thread
 data Stmt = Decl VDecl DExpr
           | While DExpr Block
           | If DExpr Block Block
-          | Spawn ThreadCode [DExpr]
+          | Spawn IThreadCode [DExpr]
           | Assign DExpr DExpr
           | Exp DExpr
           | Wait DExpr
@@ -87,22 +92,41 @@ typ1 f (E e1) = E (f e1)
 typ2 :: (DExpr -> DExpr -> DExpr) -> (Expr a -> Expr b -> Expr c)
 typ2 f (E e1) (E e2) = E (f e1 e2)
 
-class ArgPacket a where
+unsafeExprCoerce :: Expr a -> Expr b
+unsafeExprCoerce (E x) = E x
+
+-- TODO: Document this trick.
+class ArgPacket a b | a -> b where
   toDExprList :: a -> [DExpr]
   makeVars :: [String] -> a
+class ArgDecls a b | a -> b where
+  toVDecl :: a -> [VDecl]
 
-instance ArgPacket (Expr a) where
+-- This is some ugly shit.
+instance ArgPacket (Expr a) a where
   toDExprList (E x) = [x]
   makeVars [x] = E $ Var x
-instance ArgPacket (Expr a, Expr b) where
+instance ArgPacket (Expr a, Expr b) (a, b) where
   toDExprList (E x1, E x2) = [x1, x2]
   makeVars [x1, x2] = (E $ Var x1, E $ Var x2)
-instance ArgPacket (Expr a, Expr b, Expr c) where
+instance ArgPacket (Expr a, Expr b, Expr c) (a, b, c) where
   toDExprList (E x1, E x2, E x3) = [x1, x2, x3]
   makeVars [x1, x2, x3] = (E $ Var x1, E $ Var x2, E $ Var x3)
-instance ArgPacket (Expr a, Expr b, Expr c, Expr d) where
+instance ArgPacket (Expr a, Expr b, Expr c, Expr d) (a, b, c, d) where
   toDExprList (E x1, E x2, E x3, E x4) = [x1, x2, x3, x4]
   makeVars [x1, x2, x3, x4] = (E $ Var x1, E $ Var x2, E $ Var x3, E $ Var x4)
+
+instance ArgDecls (TVDecl a) a where
+  toVDecl (x1, t1) = [(x1, mkIType t1)]
+instance ArgDecls (TVDecl a, TVDecl b) (a, b) where
+  toVDecl ((x1, t1), (x2, t2)) = [(x1, mkIType t1), (x2, mkIType t2)]
+instance ArgDecls (TVDecl a, TVDecl b, TVDecl c) (a, b, c) where
+  toVDecl ((x1, t1), (x2, t2), (x3, t3)) =
+    [(x1, mkIType t1), (x2, mkIType t2), (x3, mkIType t3)]
+instance ArgDecls (TVDecl a, TVDecl b, TVDecl c, TVDecl d) (a, b, c, d) where
+  toVDecl ((x1, t1), (x2, t2), (x3, t3), (x4, t4)) =
+    [(x1, mkIType t1), (x2, mkIType t2), (x3, mkIType t3), (x4, mkIType t4)]
+
 
 infixr 2 .||
 infixr 3 .&&
@@ -120,10 +144,16 @@ infixl 6 +*
 (.||) :: BoolE -> BoolE -> BoolE
 (.||) = typ2 $ Arith Or
 
-fd_is_failure :: FdE -> BoolE
-fd_is_failure (E fd) = (E fd) .< 0
+-- Class for types we can do a failure test on
+class ExprFailable a where
+  isFailure :: Expr a -> BoolE
+instance ExprFailable Int where
+  isFailure n = n .< 0
+instance ExprFailable FD where
+  isFailure (E fd) = (E fd) .< 0
 
-instance Num (Expr Int) where
+
+instance Num IntE where
   fromInteger = E . NumLit
   (+) = typ2 $ Arith Plus
   (-) = typ2 $ Arith Minus
@@ -135,7 +165,7 @@ instance Num (Expr Int) where
 -- we overload fromInteger.  We /could/ try to give sensible meanings
 -- to the arithmetic operations, but we really don't want to encourage
 -- that sort of behavior.
-instance Num (Expr Bool) where
+instance Num BoolE where
   fromInteger = E . NumLit
   (+) = error "trying to use Num things on BoolE: don't do that"
   (-) = error "trying to use Num things on BoolE: don't do that"
@@ -209,8 +239,8 @@ exit = add Exit
 wait :: EventE  -> Prog ()
 wait (E e) = add $ Wait e
 
-spawn :: ArgPacket a => ThreadCode -> a -> Prog ()
-spawn thread args = add $ Spawn thread (toDExprList args)
+spawn :: ArgPacket a b => ThreadCode b -> a -> Prog ()
+spawn (Thr thread) args = add $ Spawn thread (toDExprList args)
 
 extract :: Prog a -> Prog (a, [Stmt])
 extract m = censor (const []) (listen m)
@@ -230,16 +260,18 @@ ifE' :: BoolE -> Prog a -> Prog ()
 ifE' e thenBody = ifE e thenBody (return ())
 
 
-callName :: ArgPacket a => String -> Prim -> Type b -> a -> Prog (Expr b)
+callName :: ArgPacket a b => String -> Prim -> Type c -> a -> Prog (Expr c)
 callName name fn t args = var name t (E $ Call fn (toDExprList args))
 
-call :: ArgPacket a => Prim -> Type b -> a -> Prog (Expr b)
+call :: ArgPacket a b => Prim -> Type c -> a -> Prog (Expr c)
 call fn t args = callName "tmp" fn t args
 
 
 -- Helper to construct a ThreadCode - kind of annoying
-declare_thread :: ArgPacket a => [VDecl] -> (a -> Prog ()) -> ThreadCode
-declare_thread decls f = (decls, desugar prog)
-  where prog = f (makeVars (map fst decls))
+declare_thread :: (ArgPacket a c, ArgDecls b c) =>
+                  b -> (a -> Prog ()) -> ThreadCode c
+declare_thread decls f = Thr (decls', desugar prog)
+  where prog = f (makeVars (map fst decls'))
+        decls' = toVDecl decls
 
 --}}}

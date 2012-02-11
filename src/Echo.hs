@@ -22,7 +22,7 @@ setup_listener port = do
   e <- mk_nb_event fd kEVENT_RD
   return (fd, e)
 
-child_code = declare_thread [("child_fd", IFD)] $
+child_code = declare_thread ("child_fd", FD) $
   \child_fd -> do
   ev <- setup_connection child_fd
   buf <- new_buf bufsize

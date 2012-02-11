@@ -38,7 +38,7 @@ parse_request buf ev = do
     parse_result .=. http_parse buf request_size
   return parse_result
 
-child_code = declare_thread [("child_fd", IInt)] $
+child_code = declare_thread ("child_fd", FD) $
   \child_fd -> do
   ev <- setup_connection child_fd
   buf <- new_buf (bufsize+1) -- pfbbt.
@@ -47,7 +47,7 @@ child_code = declare_thread [("child_fd", IInt)] $
   ifE' (parse_result .> 1 .|| parse_result .< 0) exit
 
   file_fd <- open buf kO_RDONLY
-  ifE' (fd_is_failure file_fd) exit
+  ifE' (isFailure file_fd) exit
   let cleanup = close file_fd >> exit
 
   let hdr_length = num $ length response_header
