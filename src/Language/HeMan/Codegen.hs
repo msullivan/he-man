@@ -142,7 +142,10 @@ translateArithUnop op =
 translateRelnOp op =
   case op of
     Eq -> cEq
-    Less -> cLt
-    Greater -> cGt
+    Neq -> cNeq
+    Lt -> cLt
+    Gt -> cGt
+    Leq -> cLeq
+    Geq -> cGeq
 
 --}}}

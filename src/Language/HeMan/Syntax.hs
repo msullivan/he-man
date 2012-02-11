@@ -50,7 +50,7 @@ data ArithOp = Plus | Times | Minus | Div | Mod
              deriving (Eq, Ord, Show)
 data ArithUnop = Negate | Not
                deriving (Eq, Ord, Show)
-data RelnOp = Eq | Less | Greater -- more
+data RelnOp = Eq | Lt | Gt | Leq | Geq | Neq
              deriving (Eq, Ord, Show)
 data Prim = CFn String
           deriving (Eq, Ord, Show)
@@ -126,15 +126,22 @@ instance ArgDecls (TVDecl a, TVDecl b, TVDecl c, TVDecl d) (a, b, c, d) where
 
 infixr 2 .||
 infixr 3 .&&
-infix  4 .==, .<, .> --, ./=, .<=, .>=
+infix  4 .==, .<, .>, ./=, .<=, .>=
 infixl 6 +*
 
 (.<) :: IntE -> IntE -> BoolE
-(.<) = typ2 $ RelnOp Less
+(.<) = typ2 $ RelnOp Lt
 (.>) :: IntE -> IntE -> BoolE
-(.>) = typ2 $ RelnOp Greater
+(.>) = typ2 $ RelnOp Gt
+(.<=) :: IntE -> IntE -> BoolE
+(.<=) = typ2 $ RelnOp Leq
+(.>=) :: IntE -> IntE -> BoolE
+(.>=) = typ2 $ RelnOp Geq
 (.==) :: Expr a -> Expr a -> BoolE
 (.==) = typ2 $ RelnOp Eq
+(./=) :: Expr a -> Expr a -> BoolE
+(./=) = typ2 $ RelnOp Neq
+
 (.&&) :: BoolE -> BoolE -> BoolE
 (.&&) = typ2 $ Arith And
 (.||) :: BoolE -> BoolE -> BoolE

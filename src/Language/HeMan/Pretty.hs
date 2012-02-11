@@ -118,7 +118,10 @@ instance PP Lang.ArithUnop where
 instance PP Lang.RelnOp where
   pretty o = case o of
     Lang.Eq -> text "=="
-    Lang.Less -> text "<"
-    Lang.Greater -> text ">"
+    Lang.Neq -> text "!="
+    Lang.Lt -> text "<"
+    Lang.Gt -> text ">"
+    Lang.Leq -> text "<="
+    Lang.Geq -> text ">="
 
 --}}}
