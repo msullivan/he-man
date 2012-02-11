@@ -12,11 +12,9 @@ type Var = String
 type VDecl = (Var, IType)
 type TVDecl a = (Var, Type a)
 type IThreadCode = ([VDecl], Block)
-
 data ThreadCode a = Thr IThreadCode
 
 -- Some dummy types for the phantom types
-
 data FD
 data Buffer
 data Event
@@ -34,23 +32,6 @@ data Stmt = Decl VDecl DExpr
 
 data IType = IInt | IBool | IFD | IBuffer | IEvent -- | ThreadT
           deriving (Eq, Ord, Show)
-
--- I think I should win an award for "worst reason to choose to use
--- GADTs": I want types to stay constructors so they get syntax
--- highlighted differently.
-data Type a where
-  Int :: Type Int
-  Bool :: Type Bool
-  FD :: Type FD
-  Buffer :: Type Buffer
-  Event :: Type Event
-
-mkIType :: Type a -> IType
-mkIType Int = IInt
-mkIType Bool = IBool
-mkIType FD = IFD
-mkIType Buffer = IBuffer
-mkIType Event = IEvent
 
 data DExpr = Call Prim [DExpr]
           | Arith ArithOp DExpr DExpr
@@ -75,10 +56,25 @@ data Prim = CFn String
           deriving (Eq, Ord, Show)
 
 -- Now for some phantom type bullshit
+-- I think I should win an award for "worst reason to choose to use
+-- GADTs": I want types to stay constructors so they get syntax
+-- highlighted differently.
+data Type a where
+  Int :: Type Int
+  Bool :: Type Bool
+  FD :: Type FD
+  Buffer :: Type Buffer
+  Event :: Type Event
+
+mkIType :: Type a -> IType
+mkIType Int = IInt
+mkIType Bool = IBool
+mkIType FD = IFD
+mkIType Buffer = IBuffer
+mkIType Event = IEvent
 
 newtype Expr a = E DExpr
                deriving (Eq, Ord, Show)
-
 
 type IntE = Expr Int
 type FdE = Expr FD
@@ -143,6 +139,9 @@ infixl 6 +*
 (.&&) = typ2 $ Arith And
 (.||) :: BoolE -> BoolE -> BoolE
 (.||) = typ2 $ Arith Or
+-- Pointer arithmetic
+(+*) :: BufferE -> IntE -> BufferE
+(+*) = typ2 $ Arith Plus
 
 -- Class for types we can do a failure test on
 class ExprFailable a where
@@ -151,7 +150,6 @@ instance ExprFailable Int where
   isFailure n = n .< 0
 instance ExprFailable FD where
   isFailure (E fd) = (E fd) .< 0
-
 
 instance Num IntE where
   fromInteger = E . NumLit
@@ -173,12 +171,6 @@ instance Num BoolE where
   negate = error "trying to use Num things on BoolE: don't do that"
   abs = error "trying to use Num things on BoolE: don't do that"
   signum = error "trying to use Num things on BoolE: don't do that"
-
-
-
--- Pointer arithmetic
-(+*) :: BufferE -> IntE -> BufferE
-(+*) = typ2 $ Arith Plus
 
 num :: Int -> IntE
 num = E . NumLit . toInteger
@@ -259,15 +251,13 @@ ifE (E e) thenBody elseBody = do
 ifE' :: BoolE -> Prog a -> Prog ()
 ifE' e thenBody = ifE e thenBody (return ())
 
-
 callName :: ArgPacket a b => String -> Prim -> Type c -> a -> Prog (Expr c)
 callName name fn t args = var name t (E $ Call fn (toDExprList args))
 
 call :: ArgPacket a b => Prim -> Type c -> a -> Prog (Expr c)
 call fn t args = callName "tmp" fn t args
 
-
--- Helper to construct a ThreadCode - kind of annoying
+-- Helper to construct a ThreadCode
 declare_thread :: (ArgPacket a c, ArgDecls b c) =>
                   b -> (a -> Prog ()) -> ThreadCode c
 declare_thread decls f = Thr (decls', desugar prog)
