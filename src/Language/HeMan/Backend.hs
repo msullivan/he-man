@@ -130,9 +130,17 @@ flattenStmt stmt bStmts aStmts tail =
 
 {- optimizeJumps removes unnecessary Gotos from the output of flattenPrgm. -}
 
-optimizeJumps bs = map (rewriteTail rs) bs'
+optimizeJumps bs = bs''
   where (_,rs,bs') = runRWS (mapM_ optimize bs) () Map.empty
-        rewriteTail rs (l,t,ss,tail) = (l,t,ss,simplifyTail [] $ walk tail rs)
+        (_,bs'') = runWriter $ mapM_ (rewriteTail rs) bs'
+
+rewriteTail rs b = do
+  case b of
+    -- Recover empty GotoWait targets.
+    (l,t,ss,GotoWait g) | walk (Goto g) rs /= (Goto g) ->
+      tell [b,(g,t,[],walk (Goto g) rs)]
+    -- Redirect and simplify tail.
+    (l,t,ss,tail) -> tell [(l,t,ss,simplifyTail [] $ walk tail rs)]
 
 type Optimizer = RWS () [Block] (Map.Map Tail Tail)
 
