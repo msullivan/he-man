@@ -13,6 +13,8 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Bits
+import Data.List
+import Debug.Trace as DT
 
 type Prgm = [Block]
 
@@ -232,15 +234,16 @@ optimizeStmt stmt =
 optimizeTail env (If e ([],c) ([],a)) = do
   e' <- optimizeExpr e
   -- Constant true/false: replace with branch.
-  if e' == Front.NumLit 0 then optimizeTail env a else
-    if constantExpr e' then optimizeTail env c else case e' of
-      -- Redundantly true.
-      Front.RelnOp op e1 e2 | impliedR env (op,e1,e2) -> optimizeTail env c
-      -- Otherwise, recur on branches.
-      _ -> do
-        c' <- optimizeTail (assumptions e' ++ env) c
-        a' <- optimizeTail env a
-        return (If e' ([],c') ([],a'))
+  if e' == Front.NumLit 0 then optimizeTail env a else do
+  if constantExpr e' then optimizeTail env c else do
+  case e' of
+    -- Redundantly true.
+    Front.RelnOp op e1 e2 | impliedR env (op,e1,e2) -> optimizeTail env c
+    -- Otherwise, recur on branches.
+    _ -> do
+      c' <- optimizeTail (assumptions e' ++ env) c
+      a' <- optimizeTail env a
+      return (If e' ([],c') ([],a'))
   where impliedR env e = normalizeR e `elem` env
 optimizeTail _ t = return t
 
@@ -337,7 +340,58 @@ constFold (Front.ArithUnop op e) = case (op,e) of
 {- fuseBlocks finds blocks targeted by only one Goto, removing and inlining them
 at that Goto. -}
 
-fuseBlocks = id
+fuseBlocks bs = execState (mapM_ fuseUnique uniqueTargets) bs
+  where targets = execState (mapM_ findTargets bs) Map.empty
+        uniqueTargets = map (\(x,[y]) -> (x,y))
+          (Map.toList $ Map.filter (\ls -> length ls == 1) targets)
+        
+-- Generates a map from blocks to a list of blocks targeting them.
+findTargets :: Block -> State (Map.Map Label [Label]) ()
+findTargets (l,t,ss,tail) = case tail of
+  If expr ([],tail) ([],tail') -> do
+    findTargets (l,t,ss,tail)
+    findTargets (l,t,ss,tail')
+  Goto l' -> modify $ Map.insertWith (++) l' [l]
+  GotoWait l' -> modify $ Map.insertWith (++) l' [l]
+  Exit -> return ()
+
+fuseUnique :: (Label,Label) -> State [Block] ()
+fuseUnique (to,from) = do
+  bs <- get
+  let ([toBlock],bs') = partition (\b -> getLabel b == to) bs
+  -- Don't fuse if target is the head of a thread.
+  if getLabel toBlock == getThread toBlock then return () else do
+  let ([fromBlock],bs'') = partition (\b -> getLabel b == from) bs'
+  case fuse fromBlock toBlock of
+    Nothing -> return ()
+    Just fromBlock' -> put (fromBlock':bs'')
+
+{- Generic block fusion routines. -}
+
+-- Fuse two blocks, or re-fuse to do so (ha ha).
+fuse (fromL,fromT,fromSs,fromTail) (toL,_,toSs,toTail) =
+  case runState (fuseIf fromTail toL toSs toTail) False of
+    (_,False) -> Nothing
+    (newTail,True) -> Just (fromL,fromT,fromSs,newTail)
+
+-- Perform fusion inside Ifs, but not GotoWaits.
+-- Returned state is True if any replacements occur.
+fuseIf :: Tail -> Label -> [Stmt] -> Tail -> State Bool Tail
+fuseIf tail l newSs newTail = case tail of
+  If e (cs,Goto cl) a | cl == l -> do
+    modify (|| True)
+    fuseIf (If e (cs ++ newSs,newTail) a) l newSs newTail
+  If e c (as,Goto al) | al == l -> do
+    modify (|| True)
+    fuseIf (If e c (as ++ newSs,newTail)) l newSs newTail
+  If e (cs,c) (as,a) -> do
+    c' <- fuseIf c l newSs newTail
+    a' <- fuseIf a l newSs newTail
+    return $ If e (cs,c') (as,a')
+  _ -> return tail
+
+getLabel (l,t,ss,tail) = l
+getThread (l,t,ss,tail) = t
 
 --}}}
 --{{{ collectFrees
