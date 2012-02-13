@@ -101,14 +101,16 @@ translateTail vars tail =
     Exit -> [cleanup, return 0]
     Goto target -> [jump target, return 1]
     GotoWait target -> [jump target, return 0]
-    If e t1 t2 -> [Left $
-      cIfThen (translateExpr vars e) (cCompound (translateTail vars t1))
-      (Just (cCompound (translateTail vars t2)))]
+    If e (ss1,t1) (ss2,t2) -> [Left $
+      cIfThen (translateExpr vars e)
+        (cCompound $ transSs ss1 ++ translateTail vars t1)
+        (Just (cCompound $ transSs ss2 ++ translateTail vars t2))]
     where return n = Left $ cReturn (cIntConst n)
           jump target = Left $ cExpr (cAssign
                                       (cArrow (cVar "thread") "cont")
                                       (cVar (blockName target)))
           cleanup = Left $ cExpr (cCall (cVar "free_thread") [cVar "thread"])
+          transSs = concatMap (translateStmt vars)
 
 translateType t =
   case t of

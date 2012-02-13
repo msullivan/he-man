@@ -27,15 +27,16 @@ data Stmt = Decl Front.VDecl Front.DExpr
           | Spawn Label [(Front.VDecl, Front.DExpr)]
           deriving (Eq, Ord, Show)
 
-data Tail = If Front.DExpr Tail Tail
+data Tail = If Front.DExpr ([Stmt],Tail) ([Stmt],Tail)
           | Goto Label
           | GotoWait Label
           | Exit
           deriving (Eq, Ord, Show)
 
 backend :: Front.Block -> ([Block],[Thread])
-backend = collectFrees . (mapFst (optimize . simplifyJumps)) . flattenPrgm
---backend = collectFrees . flattenPrgm
+backend = collectFrees . (mapFst optimizations) . flattenPrgm
+  where optimizations = fuseBlocks . optimize . simplifyJumps
+        --optimizations = id
 
 mapFst f (x,y) = (f x,y)
 
@@ -99,7 +100,8 @@ flattenStmt stmt bStmts aStmts tail =
       do seqL <- fresh
          newBlock seqL aStmts tail
          (conL,altL) <- fresh2
-         (bs,tail') <- flattenStmts bStmts [] (If expr (Goto conL) (Goto altL))
+         (bs,tail') <-
+           flattenStmts bStmts [] (If expr ([],Goto conL) ([],Goto altL))
          (cs',conT) <- flattenStmts cs [] (Goto seqL)
          (as',altT) <- flattenStmts as [] (Goto seqL)
          newBlock conL cs' conT
@@ -108,7 +110,7 @@ flattenStmt stmt bStmts aStmts tail =
     Front.While expr ss ->
       do (seqL,whileL) <- fresh2
          newBlock seqL aStmts tail
-         let whileT = If expr (Goto whileL) (Goto seqL)
+         let whileT = If expr ([],Goto whileL) ([],Goto seqL)
          (bs,tail') <- flattenStmts bStmts [] whileT
          (ws,whileT') <- flattenStmts ss [] whileT
          newBlock whileL ws whileT'
@@ -168,9 +170,10 @@ simplify b = case b of
   _ -> tell [b]
 
 walk x xs = case (x,Map.lookup x xs) of
-  (_,Just (If e t t')) -> walk (If e (walk t xs) (walk t' xs)) xs
+  (_,Just (If e ([],t) ([],t'))) ->
+    walk (If e ([],walk t xs) ([],walk t' xs)) xs
   (_,Just x') -> walk x' xs
-  (If e t t',Nothing) -> If e (walk t xs) (walk t' xs)
+  (If e ([],t) ([],t'),Nothing) -> If e ([],walk t xs) ([],walk t' xs)
   (_,Nothing) -> x
 
 --}}}
@@ -226,7 +229,7 @@ optimizeStmt stmt =
       exprs' <- mapM optimizeExpr (map snd args)
       return $ Spawn l (zip (map fst args) exprs')
 
-optimizeTail env (If e c a) = do
+optimizeTail env (If e ([],c) ([],a)) = do
   e' <- optimizeExpr e
   -- Constant true/false: replace with branch.
   if e' == Front.NumLit 0 then optimizeTail env a else
@@ -237,7 +240,7 @@ optimizeTail env (If e c a) = do
       _ -> do
         c' <- optimizeTail (assumptions e' ++ env) c
         a' <- optimizeTail env a
-        return (If e' c' a')
+        return (If e' ([],c') ([],a'))
   where impliedR env e = normalizeR e `elem` env
 optimizeTail _ t = return t
 
@@ -329,6 +332,14 @@ constFold (Front.ArithUnop op e) = case (op,e) of
   _ -> Front.ArithUnop op e
 
 --}}}
+--{{{ fuseBlocks
+
+{- fuseBlocks finds blocks targeted by only one Goto, removing and inlining them
+at that Goto. -}
+
+fuseBlocks = id
+
+--}}}
 --{{{ collectFrees
 
 {- collectFrees determines, for each thread, the variables which must be
@@ -383,8 +394,10 @@ collectExpr e = case e of
   Front.CurThread -> return ()
 
 collectTail t = case t of
-  If expr tail tail' ->
+  If expr (ss,tail) (ss',tail') ->
     do collectExpr expr
+       mapM collectStmt ss
+       mapM collectStmt ss'
        collectTail tail
        collectTail tail'
   Goto _ -> return ()
