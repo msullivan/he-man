@@ -87,11 +87,8 @@ instance PP Stmt where
 instance PP Tail where
   pretty t = case t of
     If expr (ss,tail) (ss',tail') ->
-      text "if" <+> parens (pretty expr)
-        $$ nest 2 (pretty ss)
-        $$ nest 2 (pretty tail)
-        $$ nest 2 (pretty ss')
-        $$ nest 2 (pretty tail')
+      text "if" <+> parens (pretty expr) $$ nest 2 (pretty ss $$ pretty tail) 
+      $$ text "else" $$ nest 2 (pretty ss' $$ pretty tail')
     GotoWait label -> text "gotoWait" <+> int label
     Goto label -> text "goto" <+> int label
     Exit -> text "exit"
