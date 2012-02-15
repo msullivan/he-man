@@ -172,7 +172,7 @@ static void do_poll(bool can_sleep)
 
 	// If we aren't expecting aio, block indefinitely, otherwise
 	// just poll.
-	int epoll_timeout =	state.expect_aio || !can_sleep ? 0 : -1;
+	int epoll_timeout = state.expect_aio || !can_sleep ? 0 : -1;
 	int epoll_cnt = epoll_wait(state.epoll_fd, epoll_events,
 	                           MAX_EVENTS, epoll_timeout);
 	for (int i = 0; i < epoll_cnt; i++) {
