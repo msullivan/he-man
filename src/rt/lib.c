@@ -35,6 +35,8 @@ int sock_bind_v4(int fd, int addr, int port)
 	if (bind(fd, (struct sockaddr *)&servaddr,
 	         sizeof(servaddr)) < 0)
 		fail(1, "bind");
+
+	return 0;
 }
 
 int print_int(int n) { return printf("%d\n", n); }
