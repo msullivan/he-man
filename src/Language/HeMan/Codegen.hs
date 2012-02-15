@@ -34,9 +34,9 @@ translatePrgm (blocks, threads) =
          [main] ++
          map (translateBlock threads) blocks)
   where main = cFunction "main" [] [cInt] $ cCompound
-                 ((translateStmt [] $ Spawn 0 []) ++
-                  [Left $ cExpr $ cCall (cVar "setup_main_loop") [],
-                   Left $ cExpr $ cCall (cVar "main_loop") [],
+                 ([Left $ cExpr $ cCall (cVar "setup_main_loop") []] ++
+                  (translateStmt [] $ Spawn 0 []) ++
+                  [Left $ cExpr $ cCall (cVar "main_loop") [],
                    Left $ cReturn $ cIntConst 0])
 
 translateThread (name, vars) =
