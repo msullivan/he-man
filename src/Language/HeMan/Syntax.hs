@@ -99,6 +99,9 @@ class ArgDecls a b | a -> b where
   toVDecl :: a -> [VDecl]
 
 -- This is some ugly shit.
+instance ArgPacket () () where
+  toDExprList () = []
+  makeVars [] = ()
 instance ArgPacket (Expr a) a where
   toDExprList (E x) = [x]
   makeVars [x] = E $ Var x
@@ -111,7 +114,14 @@ instance ArgPacket (Expr a, Expr b, Expr c) (a, b, c) where
 instance ArgPacket (Expr a, Expr b, Expr c, Expr d) (a, b, c, d) where
   toDExprList (E x1, E x2, E x3, E x4) = [x1, x2, x3, x4]
   makeVars [x1, x2, x3, x4] = (E $ Var x1, E $ Var x2, E $ Var x3, E $ Var x4)
+instance ArgPacket (Expr a, Expr b, Expr c, Expr d, Expr e)
+         (a, b, c, d, e) where
+  toDExprList (E x1, E x2, E x3, E x4, E x5) = [x1, x2, x3, x4, x5]
+  makeVars [x1, x2, x3, x4, x5] = 
+    (E $ Var x1, E $ Var x2, E $ Var x3, E $ Var x4, E $ Var x5)
 
+instance ArgDecls () () where
+  toVDecl () = []
 instance ArgDecls (TVDecl a) a where
   toVDecl (x1, t1) = [(x1, mkIType t1)]
 instance ArgDecls (TVDecl a, TVDecl b) (a, b) where
@@ -122,6 +132,11 @@ instance ArgDecls (TVDecl a, TVDecl b, TVDecl c) (a, b, c) where
 instance ArgDecls (TVDecl a, TVDecl b, TVDecl c, TVDecl d) (a, b, c, d) where
   toVDecl ((x1, t1), (x2, t2), (x3, t3), (x4, t4)) =
     [(x1, mkIType t1), (x2, mkIType t2), (x3, mkIType t3), (x4, mkIType t4)]
+instance ArgDecls (TVDecl a, TVDecl b, TVDecl c, TVDecl d, TVDecl e) 
+         (a, b, c, d, e) where
+  toVDecl ((x1, t1), (x2, t2), (x3, t3), (x4, t4), (x5, t5)) =
+    [(x1, mkIType t1), (x2, mkIType t2), (x3, mkIType t3), (x4, mkIType t4),
+     (x5, mkIType t5)]
 
 
 infixr 2 .||
