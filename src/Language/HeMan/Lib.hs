@@ -92,7 +92,7 @@ accept (fd, e) = do_nb_action e (sock_accept fd)
 do_read (fd, e) buf size = do_nb_action e (sock_read fd buf size)
 do_write (fd, e) buf size = do_nb_action e (sock_write fd buf size)
 
-full_write ev buf size = do
+full_write_naive ev buf size = do
   amt_written <- var "total_written" Int 0
   failed <- var "write_failed" Int 0
   while (amt_written .< size .&& failed .== 0) $ do
@@ -101,6 +101,10 @@ full_write ev buf size = do
     ifE' (amt .== 0) $ do failed .= 1
   return amt_written
 
+-- This is "good" in the sense that by incorporating EAGAIN and short
+-- returns into one loop, it reduces the number of loops we generate,
+-- hopefully allowing us to produce more idiomatic looking code.
+-- This is "broken" in the sense that it crashes the backend.
 full_write_good_but_broken (fd, e) buf size = do
   amt_written <- var "total_written" Int 0
   failed <- var "write_failed" Int 0
@@ -110,3 +114,5 @@ full_write_good_but_broken (fd, e) buf size = do
       (ifE (amt .== 0) (failed .= 1)
        (amt_written .= amt_written + amt))
   return amt_written
+
+full_write = full_write_naive
