@@ -1,5 +1,5 @@
 {-#LANGUAGE GADTs, EmptyDataDecls, FlexibleInstances, TypeSynonymInstances,
-   MultiParamTypeClasses, FunctionalDependencies #-}
+   MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 
 module Language.HeMan.Syntax where
 
@@ -104,15 +104,20 @@ class ArgDecls a b | a -> b, b -> a where
 data OneArg a
 
 -- This is some ugly shit.
+-- Nullary and unary arg packets
 instance ArgPacket () () where
   toDExprList () = []
   makeVars [] = ()
 instance ArgPacket (Expr a) (OneArg a) where
   toDExprList (E x) = [x]
   makeVars [x] = E $ Var x
-instance ArgPacket (Expr a, Expr b) (a, b) where
-  toDExprList (E x1, E x2) = [x1, x2]
-  makeVars [x1, x2] = (E $ Var x1, E $ Var x2)
+
+-- Generic binary packets; this makes us need UndecidableInstances
+instance (ArgPacket b c) => ArgPacket (Expr a, b) (a, c) where
+  toDExprList (E x, xs) = x : toDExprList xs
+  makeVars (x : xs) = (E $ Var x, makeVars xs)
+
+-- Hacky 3,4,5-ary packets
 instance ArgPacket (Expr a, Expr b, Expr c) (a, b, c) where
   toDExprList (E x1, E x2, E x3) = [x1, x2, x3]
   makeVars [x1, x2, x3] = (E $ Var x1, E $ Var x2, E $ Var x3)
@@ -125,12 +130,17 @@ instance ArgPacket (Expr a, Expr b, Expr c, Expr d, Expr e)
   makeVars [x1, x2, x3, x4, x5] = 
     (E $ Var x1, E $ Var x2, E $ Var x3, E $ Var x4, E $ Var x5)
 
+-- Nullary and unary arg decls
 instance ArgDecls () () where
   toVDecl () = []
 instance ArgDecls (TVDecl a) (OneArg a) where
   toVDecl (x1, t1) = [(x1, mkIType t1)]
-instance ArgDecls (TVDecl a, TVDecl b) (a, b) where
-  toVDecl ((x1, t1), (x2, t2)) = [(x1, mkIType t1), (x2, mkIType t2)]
+
+-- Generic binary arg decls; this makes us need UndecidableInstances
+instance (ArgDecls b c) => ArgDecls (TVDecl a, b) (a, c) where
+  toVDecl ((x, t), xts) = (x, mkIType t) : toVDecl xts
+
+-- Hacky 3,4,5-ary arg decls
 instance ArgDecls (TVDecl a, TVDecl b, TVDecl c) (a, b, c) where
   toVDecl ((x1, t1), (x2, t2), (x3, t3)) =
     [(x1, mkIType t1), (x2, mkIType t2), (x3, mkIType t3)]
