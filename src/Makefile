@@ -7,18 +7,18 @@ RUNTIME_OBJ=rt/mainloop.o rt/lib.o
 ${HEMAN_OBJ}: Language/HeMan.hs
 	ghc --make $<
 
-all: rt/echo rt/http
+all: rt/echod rt/httpd
 
 # Echo server
 
-rt/echo: ${RUNTIME_OBJ}
+rt/echod: ${RUNTIME_OBJ}
 
 rt/echo.c: Echo.hs ${HEMAN_OBJ}
 	ghc $< -e 'compile "$@" main_loop'
 
 # HTTP server
 
-rt/http: rt/http_lib.o ${RUNTIME_OBJ}
+rt/httpd: rt/http_lib.o ${RUNTIME_OBJ}
 
 rt/http.c: Http.hs ${HEMAN_OBJ}
 	ghc $< -e 'compile "$@" main_loop'
