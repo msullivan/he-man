@@ -92,17 +92,22 @@ unsafeExprCoerce :: Expr a -> Expr b
 unsafeExprCoerce (E x) = E x
 
 -- TODO: Document this trick.
-class ArgPacket a b | a -> b where
+class ArgPacket a b | a -> b, b -> a where
   toDExprList :: a -> [DExpr]
   makeVars :: [String] -> a
-class ArgDecls a b | a -> b where
+class ArgDecls a b | a -> b, b -> a where
   toVDecl :: a -> [VDecl]
+
+-- A dummy one argument constructor for use in guarenteeing that
+-- ArgPacket and ArgDecl type classes have a one to one mapping
+-- between their parameters.
+data OneArg a
 
 -- This is some ugly shit.
 instance ArgPacket () () where
   toDExprList () = []
   makeVars [] = ()
-instance ArgPacket (Expr a) a where
+instance ArgPacket (Expr a) (OneArg a) where
   toDExprList (E x) = [x]
   makeVars [x] = E $ Var x
 instance ArgPacket (Expr a, Expr b) (a, b) where
@@ -122,7 +127,7 @@ instance ArgPacket (Expr a, Expr b, Expr c, Expr d, Expr e)
 
 instance ArgDecls () () where
   toVDecl () = []
-instance ArgDecls (TVDecl a) a where
+instance ArgDecls (TVDecl a) (OneArg a) where
   toVDecl (x1, t1) = [(x1, mkIType t1)]
 instance ArgDecls (TVDecl a, TVDecl b) (a, b) where
   toVDecl ((x1, t1), (x2, t2)) = [(x1, mkIType t1), (x2, mkIType t2)]
