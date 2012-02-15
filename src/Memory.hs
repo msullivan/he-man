@@ -4,12 +4,12 @@ module Memory where
 
 import Language.HeMan
 
-child_code = declare_thread [] $
-  \[] -> do x <- var "x" Int 1
+child_code = declare_thread () $
+  \() -> do x <- var "x" Int 1
             while 1 $ do
               y <- var "y" Int 1
               return ()
 
 main_loop = do
   while 1 $ do
-    spawn child_code []
+    spawn child_code ()
