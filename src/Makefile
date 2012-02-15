@@ -1,7 +1,7 @@
 CFLAGS=-g -std=c99 -Wall -O2 -Wno-unused-variable
 HEMAN_OBJ=Language/HeMan.o
 RUNTIME_OBJ=rt/mainloop.o rt/lib.o
-HEADERS=rt/mainloop.h rt/variable_queue.h
+HEADERS=rt/mainloop.h rt/lib.h rt/variable_queue.h
 
 all: rt/echod rt/httpd
 
@@ -10,10 +10,13 @@ all: rt/echod rt/httpd
 ${HEMAN_OBJ}: Language/HeMan.hs
 	ghc --make $<
 
+rt/mainloop.o: rt/mainloop.c ${HEADERS}
+rt/lib.o: rt/lib.c ${HEADERS}
+
 # Echo server
 
 rt/echod: rt/echo.o ${RUNTIME_OBJ}
-	gcc ${CFLAGS} $^ -o $@ -laio
+	${CC} ${CFLAGS} $^ -o $@ -laio
 
 rt/echo.o: rt/echo.c ${HEADERS}
 
@@ -23,7 +26,7 @@ rt/echo.c: Echo.hs ${HEMAN_OBJ}
 # HTTP server
 
 rt/httpd: rt/http_lib.o rt/http.o ${RUNTIME_OBJ}
-	gcc ${CFLAGS} $^ -o $@ -laio
+	${CC} ${CFLAGS} $^ -o $@ -laio
 
 rt/http.c: Http.hs ${HEMAN_OBJ}
 	ghc $< -e 'compile "$@" main_loop'
