@@ -50,6 +50,7 @@ typedef struct event_t {
 	bool complete;
 	thread_t *thread;
 } event_t;
+typedef event_t * event_handle;
 
 char *new_buf(thread_t *t, int size);
 event_t *mk_nb_event(thread_t *t, int fd, int mode);

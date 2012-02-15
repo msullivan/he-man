@@ -117,7 +117,7 @@ translateType t =
     IInt -> (cInt,[])
     IBool -> (cBool,[])
     IFD -> (cInt,[])
-    IEvent -> (cType "event_t",[cPtr])
+    IEvent -> (cType "event_handle",[])
     IBuffer -> (cChar,[cPtr])
 
 --}}}
