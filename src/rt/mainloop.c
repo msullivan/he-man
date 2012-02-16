@@ -15,12 +15,20 @@
 #include <libaio.h>
 #include <sys/eventfd.h>
 
+#include <pthread.h>
+
 #include "variable_queue.h"
 #include "mainloop.h"
+#include "thrpool.h"
+
+#define MT_RUNTIME 1
 
 #define MAX_EVENTS 10
 #define MAX_AIO_EVENTS 100 // dunno what this should be...
 #define MAX_ITERS 50
+#define MAX_THREADS 4
+
+int thread_count = MAX_THREADS;
 
 int next_tid = 0;
 
@@ -29,8 +37,11 @@ static struct {
 	io_context_t aio_ctx;
 	int aio_eventfd;
 	struct event_t *aio_dummy_event;
-	//thread_pool_t sched_queue;
+#if MT_RUNTIME
+	thread_pool_t sched_queue;
+#else
 	thread_queue_t sched_queue;
+#endif
 } state;
 
 // XXX: we want something faster than this
@@ -55,9 +66,10 @@ event_t *mk_nb_event(thread_t *thread, int fd, int mode)
 {
 	event_t *e = mk_event();
 	e->id = fd;
+	e->mode = mode;
 
-	if (epoll_ctler(EPOLL_CTL_ADD, fd, mode|EPOLLET, e) < 0)
-		fail(1, "epoll_ctl");
+	if (epoll_ctler(EPOLL_CTL_ADD, fd, 0, e) < 0)
+		fail(1, "epoll_ctl: %d", fd);
 
 	Q_INSERT_TAIL(&thread->nb_events, e, gc_link);
 
@@ -93,10 +105,15 @@ void free_thread(thread_t *thread)
 }
 
 
-void register_event(thread_t *thread, event_t *event)
+void register_event(thread_t *thread, event_t *e)
 {
-	Q_INSERT_TAIL(&thread->pending_events, event, q_link);
-	event->thread = thread;
+	// helgrind will report a data race having to do with this, but
+	// I'm pretty sure it's actually fine. The event pointer is handed
+	// off through epoll.
+	e->thread = thread;
+	// XXX: this only makes sense for epoll events, not AIO ones
+	if (epoll_ctler(EPOLL_CTL_MOD, e->id, e->mode|EPOLLONESHOT, e) < 0)
+		fail(1, "epoll_ctl: %d", e->id);
 }
 
 int epoll_ctler(int op, int fd, uint32_t events, void *ptr)
@@ -109,7 +126,11 @@ int epoll_ctler(int op, int fd, uint32_t events, void *ptr)
 
 void make_runnable(thread_t *t)
 {
+#if MT_RUNTIME
+	thread_pool_push(&state.sched_queue, t);
+#else
 	Q_INSERT_TAIL(&state.sched_queue, t, q_link);
+#endif
 }
 
 
@@ -118,17 +139,6 @@ static void handle_event(event_t *event)
 	thread_t *t = event->thread;
 	// If nobody gives a shit, just leave
 	if (!t) return;
-
-	// Indicate what event finished
-	t->finished_event = event;
-
-	// Clear out other events we are waiting on
-	event_t *ev;
-	Q_ASSERT_CONSISTENT(&t->pending_events, event, q_link);
-	Q_FOREACH(ev, &t->pending_events, q_link) {
-		ev->thread = NULL;
-	}
-	Q_INIT_HEAD(&t->pending_events);
 
 	// Schedule the thread we woke up
 	make_runnable(t);
@@ -184,8 +194,9 @@ static void do_poll(bool can_sleep)
 	}
 }
 
-static void run_thread(thread_t *thread)
+static void run_thread(void *threadp)
 {
+	thread_t *thread = threadp;
 	//printf("running %d\n", thread->tid);
 	bool runnable = true;
 	// Run the thread until it has run for a while or has stopped being
@@ -200,18 +211,26 @@ static void run_thread(thread_t *thread)
 void main_loop(void)
 {
 	for (;;) {
+#if MT_RUNTIME
+		do_poll(false);
+#else
 		thread_t *thread;
 		if ((thread = Q_GET_HEAD(&state.sched_queue))) {
 			Q_REMOVE(&state.sched_queue, thread, q_link);
 			run_thread(thread);
 		}
 		do_poll(!Q_GET_HEAD(&state.sched_queue));
+#endif
 	}
 }
 
 void setup_main_loop(void)
 {
 	int ret;
+
+#if MT_RUNTIME
+	thread_pool_init(&state.sched_queue, run_thread, thread_count);
+#endif
 
 	signal(SIGPIPE, SIG_IGN);
 	

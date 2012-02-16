@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <libaio.h>
 #include "variable_queue.h"
+#include "thrpool.h"
 
 extern int next_tid;
 
@@ -32,20 +33,18 @@ typedef struct buf_t {
 } buf_t;
 
 typedef struct thread_t {
+	work_item_t work_item;
 	Q_NEW_LINK(thread_t) q_link;
 	int tid;
-	event_queue_t pending_events;
 	event_queue_t nb_events;
 	buf_queue_t bufs;
-	struct event_t *finished_event;
 	thread_cont *cont;
 } thread_t;
 
-// XXX: track read/write event interest
 typedef struct event_t {
-	Q_NEW_LINK(event_t) q_link;
 	Q_NEW_LINK(event_t) gc_link;
 	int id;
+	int mode;
 	bool complete;
 	thread_t *thread;
 } event_t;
