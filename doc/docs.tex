@@ -1,6 +1,7 @@
 \documentclass{article}
 \usepackage{fullpage}
 \usepackage[dvipsnames,usenames]{color}
+\usepackage[colorlinks=true,linkcolor=black,urlcolor=black]{hyperref}
 \renewcommand{\tt}{\texttt}
 
 \usepackage{listings}
@@ -29,6 +30,9 @@
   {}
 
 \begin{document}
+\tableofcontents
+
+\input{../src/Language/HeMan/Backend.lhs}
 
 \input{../src/Language/HeMan/CLib.lhs}
 

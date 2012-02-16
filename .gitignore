@@ -3,8 +3,11 @@
 *.log
 *.bbl
 *.blg
+*.toc
+.*.swp
 *.o
 *.hi
+docs.out
 proposal.pdf
 docs.pdf
 a.out

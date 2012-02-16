@@ -1,7 +1,11 @@
+\section{Backend}
+This module translates the front-end language (as desugared by
+\tt{Language.HeMan.Syntax}) to a back-end language with explicit control flow,
+which is straightforwardly translated to C in \tt{Language.HeMan.Codegen}.
+
+\begin{code}
 module Language.HeMan.Backend
-  (Stmt(..), Tail(..), Block, Thread,
-   backend)
-  where
+  (Stmt(..), Tail(..), Block, Thread, backend) where
 
 import qualified Language.HeMan.Syntax as Front
   (Stmt(..), DExpr(..), VDecl, Prim(..),
@@ -15,7 +19,12 @@ import Data.Maybe
 import Data.Bits
 import Data.List
 import Debug.Trace as DT
+\end{code}
 
+In this representation, a program is a set of labeled statement blocks. We
+replace all control flow with conditional and unconditional jumps. Thread code
+is no longer inlined at the spawn site.
+\begin{code}
 type Prgm = [Block]
 
 type Label = Int
@@ -34,7 +43,12 @@ data Tail = If Front.DExpr ([Stmt],Tail) ([Stmt],Tail)
           | GotoWait Label
           | Exit
           deriving (Eq, Ord, Show)
+\end{code}
 
+The backend first translates the front-end language, then runs a series of
+optimization passes, then performs closure conversion on each thread, collecting
+variables needed across multiple blocks.
+\begin{code}
 backend :: Front.Block -> ([Block],[Thread])
 backend = collectFrees . (mapFst optimizations) . flattenPrgm
   where optimizations = fuseBlocks . optimize . simplifyJumps
@@ -46,9 +60,10 @@ constantExpr expr = case expr of
   Front.NumLit n -> True
   Front.StringLit s -> True
   _ -> False
+\end{code}
 
---{{{ flattenPrgm
-
+\subsection{\tt{flattenPrgm}} % {{{
+\begin{code}
 type Flattener = RWS ThreadName ([Block],[Thread]) Label
 
 flattenPrgm stmts = ((0,0,s,t):blocks,(0,[]):thds) where
@@ -135,10 +150,11 @@ flattenStmt stmt bStmts aStmts tail =
          newThread threadL vs
          return (bs,tail')
   where continue s = flattenStmts bStmts (s:aStmts) tail
+\end{code}
 
---}}}
---{{{ simplifyJumps
-
+% }}}
+\subsection{\tt{simplifyJumps}} % {{{
+\begin{code}
 {- simplifyJumps removes unnecessary Gotos from the output of flattenPrgm. -}
 
 simplifyJumps bs = execWriter $ mapM_ (rewriteTail rs) bs'
@@ -177,10 +193,12 @@ walk x xs = case (x,Map.lookup x xs) of
   (_,Just x') -> walk x' xs
   (If e ([],t) ([],t'),Nothing) -> If e ([],walk t xs) ([],walk t' xs)
   (_,Nothing) -> x
+\end{code}
 
---}}}
---{{{ optimize
+% }}}
+\subsection{\tt{optimize}} % {{{
 
+\begin{code}
 {- optimize performs block-local constant propagation and constant folding, and
 block folding, in order to further reduce code size. -}
 
@@ -333,10 +351,12 @@ constFold (Front.ArithUnop op e) = case (op,e) of
   (Front.Not,Front.NumLit 0) -> Front.NumLit 1
   (Front.Not,Front.NumLit _) -> Front.NumLit 0
   _ -> Front.ArithUnop op e
+\end{code}
 
---}}}
---{{{ fuseBlocks
+% }}}
+\subsection{\tt{fuseBlocks}} % {{{
 
+\begin{code}
 {- fuseBlocks finds blocks targeted by only one Goto, removing and inlining them
 at that Goto. -}
 
@@ -392,9 +412,11 @@ fuseIf tail l newSs newTail = case tail of
 
 getLabel (l,t,ss,tail) = l
 getThread (l,t,ss,tail) = t
+\end{code}
 
---}}}
---{{{ collectFrees
+% }}}
+\subsection{\tt{collectFrees}} % {{{
+\begin{code}
 
 {- collectFrees determines, for each thread, the variables which must be
 retained across multiple blocks, and adds those to the list of thread-local
@@ -457,9 +479,11 @@ collectTail t = case t of
   Goto _ -> return ()
   GotoWait _ -> return ()
   Exit -> return ()
+\end{code}
 
---}}}
---{{{ Tests
+% }}}
+\subsection{Tests} % {{{
+\begin{code}
 {-
 
 testFlat = backend [Front.Decl ("x",Front.Int) (Front.Var "y")]
@@ -525,5 +549,5 @@ testCollect = backend [Front.Decl ("y",Front.Int) (Front.NumLit 2),
                                [Front.Exit]
                                [Front.Exp $ Front.Var "y"]]
 -}
-
---}}}
+\end{code}
+% }}}
