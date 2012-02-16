@@ -19,7 +19,6 @@
 
 #include "variable_queue.h"
 #include "mainloop.h"
-#include "thrpool.h"
 
 #define MT_RUNTIME 1
 
@@ -38,11 +37,21 @@ static struct {
 	int aio_eventfd;
 	struct event_t *aio_dummy_event;
 #if MT_RUNTIME
-	thread_pool_t sched_queue;
-#else
-	thread_queue_t sched_queue;
+	pthread_mutex_t sched_lock;
 #endif
+	thread_queue_t sched_queue;
 } state;
+
+static inline void sched_lock(void) {
+#if MT_RUNTIME
+	pthread_mutex_lock(&state.sched_lock);
+#endif
+}
+static inline void sched_unlock(void) {
+#if MT_RUNTIME
+	pthread_mutex_unlock(&state.sched_lock);
+#endif
+}
 
 // XXX: we want something faster than this
 // and maybe want to recover from failure
@@ -126,11 +135,9 @@ int epoll_ctler(int op, int fd, uint32_t events, void *ptr)
 
 void make_runnable(thread_t *t)
 {
-#if MT_RUNTIME
-	thread_pool_push(&state.sched_queue, t);
-#else
+	sched_lock();
 	Q_INSERT_TAIL(&state.sched_queue, t, q_link);
-#endif
+	sched_unlock();
 }
 
 
@@ -208,29 +215,41 @@ static void run_thread(void *threadp)
 }
 
 // A single threaded main loop
-void main_loop(void)
+void *work_loop(void *p)
 {
 	for (;;) {
-#if MT_RUNTIME
-		do_poll(false);
-#else
 		thread_t *thread;
+		sched_lock();
 		if ((thread = Q_GET_HEAD(&state.sched_queue))) {
 			Q_REMOVE(&state.sched_queue, thread, q_link);
+			sched_unlock();
 			run_thread(thread);
+			sched_lock();
 		}
-		do_poll(!Q_GET_HEAD(&state.sched_queue));
-#endif
+		bool can_sleep = !Q_GET_HEAD(&state.sched_queue);
+		sched_unlock();
+		do_poll(can_sleep);
 	}
+	return NULL;
 }
+
+void main_loop(void)
+{
+#if MT_RUNTIME
+	pthread_t thread;
+	for (int i = 0; i < thread_count - 1; i++) {
+		int ret = pthread_create(&thread, NULL, work_loop, NULL);
+		if (ret != 0) fail(1, "pthread_create");
+	}
+#endif
+
+	work_loop(NULL);
+}
+
 
 void setup_main_loop(void)
 {
 	int ret;
-
-#if MT_RUNTIME
-	thread_pool_init(&state.sched_queue, run_thread, thread_count);
-#endif
 
 	signal(SIGPIPE, SIG_IGN);
 	
