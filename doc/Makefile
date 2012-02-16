@@ -2,7 +2,7 @@
 
 SRC=../src/Language/HeMan
 
-docs.pdf: docs.tex ${SRC}/CLib.lhs
+docs.pdf: docs.tex ${SRC}/CLib.lhs ${SRC}/Backend.lhs
 	pdflatex $<
 
 clean:

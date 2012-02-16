@@ -1,3 +1,9 @@
+\section{Backend}
+This module translates the front-end language (desugared by
+\tt{Language.HeMan.Syntax}) to a back-end language with explicit control flow,
+which is straightforwardly translated to C in \tt{Language.HeMan.Codegen}.
+
+\begin{code}
 module Language.HeMan.Backend
   (Stmt(..), Tail(..), Block, Thread,
    backend)
@@ -15,7 +21,10 @@ import Data.Maybe
 import Data.Bits
 import Data.List
 import Debug.Trace as DT
+\end{code}
 
+
+\begin{code}
 type Prgm = [Block]
 
 type Label = Int
@@ -527,3 +536,4 @@ testCollect = backend [Front.Decl ("y",Front.Int) (Front.NumLit 2),
 -}
 
 --}}}
+\end{code}
