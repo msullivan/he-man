@@ -179,6 +179,8 @@ infixl 6 +*
 -- Pointer arithmetic
 (+*) :: BufferE -> IntE -> BufferE
 (+*) = typ2 $ Arith Plus
+notE :: BoolE -> BoolE
+notE = typ1 $ ArithUnop Not
 
 -- Class for types we can do a failure test on
 class ExprFailable a where
