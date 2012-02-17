@@ -81,22 +81,23 @@ kO_RDONLY = constant "O_RDONLY"
 
 kEAGAIN = constant "EAGAIN"
 
-
-do_nb_action :: ExprFailable a => Expr Event -> Prog (Expr a) -> Prog (Expr a)
-do_nb_action e action = do
-  res <- action
-  ifE' (isFailure res) $ do
-    while (isFailure res) $ do
-      wait e
-      res .=. action
+-- This implementation depends on level triggered semantics
+do_nb_action :: ExprFailable a =>
+                Type a -> IntE -> Expr Event -> Prog (Expr a) ->
+                Prog (Expr a)
+do_nb_action t mode e action = do
+  res <- var "result" t (E (NumLit (-1))) -- HACK! bad!
+  while (isFailure res) $ do
+    prepare_event e mode
+    wait e
+    res .=. action
   return res
 
-accept (fd, e) = do_nb_action e (prepare_event e kEVENT_RD >> sock_accept fd)
-do_read (fd, e) buf size = do_nb_action e
-                           (prepare_event e kEVENT_RD >> sock_read fd buf size)
-do_write (fd, e) buf size = do_nb_action e
-                            (prepare_event e kEVENT_WR >>
-                             sock_write fd buf size)
+accept (fd, e) = do_nb_action FD kEVENT_RD e (sock_accept fd)
+do_read (fd, e) buf size = do_nb_action Int kEVENT_RD e
+                           (sock_read fd buf size)
+do_write (fd, e) buf size = do_nb_action Int kEVENT_WR e
+                            (sock_write fd buf size)
 
 -- TODO remove this
 full_write_naive ev buf size = do
