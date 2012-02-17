@@ -89,7 +89,7 @@ instance PP Tail where
     If expr (ss,tail) (ss',tail') ->
       text "if" <+> parens (pretty expr) $$ nest 2 (pretty ss $$ pretty tail) 
       $$ text "else" $$ nest 2 (pretty ss' $$ pretty tail')
-    GotoWait label -> text "gotoWait" <+> int label
+    GotoWait e label -> text "gotoWait" <+> pretty e <+> int label
     Goto label -> text "goto" <+> int label
     Exit -> text "exit"
 

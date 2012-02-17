@@ -100,7 +100,7 @@ translateTail vars tail =
   case tail of
     Exit -> [cleanup, return 0]
     Goto target -> [jump target, return 1]
-    GotoWait target -> [jump target, return 0]
+    GotoWait e target -> [jump target, register e, return 0]
     If e (ss1,t1) (ss2,t2) -> [Left $
       cIfThen (translateExpr vars e)
         (cCompound $ transSs ss1 ++ translateTail vars t1)
@@ -109,6 +109,8 @@ translateTail vars tail =
           jump target = Left $ cExpr (cAssign
                                       (cArrow (cVar "thread") "cont")
                                       (cVar (blockName target)))
+          register e = Left $ cExpr $ cCall (cVar "register_event") $
+                       [translateExpr vars CurThread, translateExpr vars e]
           cleanup = Left $ cExpr (cCall (cVar "free_thread") [cVar "thread"])
           transSs = concatMap (translateStmt vars)
 
