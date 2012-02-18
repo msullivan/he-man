@@ -297,11 +297,16 @@ optimizeTail env (If e ([],c) ([],a)) = do
       a' <- optimizeTail env a
       return (If e' ([],c') ([],a'))
   where impliedR env e = normalizeR e `elem` env
+optimizeTail env (GotoWait e l) = do
+  e' <- optimizeExpr e
+  return (GotoWait e' l)
 optimizeTail _ t = return t
 
 assumptions expr = case expr of
   Front.Arith Front.And e e' -> concatMap assumptions [e,e']
   Front.RelnOp op e e' -> [normalizeR (op,e,e')]
+  Front.ArithUnop Front.Not (Front.RelnOp op e e') ->
+    [normalizeR (negateR op,e,e')]
   _ -> []
 
 normalizeR e = case e of
@@ -310,6 +315,14 @@ normalizeR e = case e of
   (Front.Eq,a,b) | b > a -> (Front.Eq,b,a)
   (Front.Neq,a,b) | b > a -> (Front.Neq,b,a)
   _ -> e
+
+negateR op = case op of
+  Front.Gt -> Front.Leq
+  Front.Geq -> Front.Lt
+  Front.Eq -> Front.Neq
+  Front.Neq -> Front.Eq
+  Front.Lt -> Front.Geq
+  Front.Leq -> Front.Gt
 \end{code}
 
 \tt{insertVar} adds assignments to the current environment, provided they do not
