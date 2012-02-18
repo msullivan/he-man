@@ -51,7 +51,8 @@ variables needed across multiple blocks.
 \begin{code}
 backend :: Front.Block -> ([Block],[Thread])
 backend = collectFrees . (mapFst optimizations) . flattenPrgm
-  where optimizations = fuseBlocks . optimize . simplifyJumps
+  where optimizations = optimize . simplifyJumps
+        --optimizations = fuseBlocks . optimize . simplifyJumps
         --optimizations = id
 
 mapFst f (x,y) = (f x,y)
@@ -154,38 +155,42 @@ flattenStmt stmt bStmts aStmts tail =
 
 % }}}
 \subsection{\tt{simplifyJumps}} % {{{
+This pass reduces the output of \tt{flattenPrgm}, by replacing series of
+\tt{Goto}s by their ultimate target, and nesting iterated \tt{If}s. This
+eliminates nearly all empty blocks, and the resulting control flow is easier to
+analyze in later optimization passes.
 \begin{code}
-{- simplifyJumps removes unnecessary Gotos from the output of flattenPrgm. -}
-
 simplifyJumps bs = execWriter $ mapM_ (rewriteTail rs) bs'
   where (_,rs,bs') = runRWS (mapM_ simplify bs) () Map.empty
+\end{code}
 
-rewriteTail rs b = case b of
-  -- Recover empty GotoWait targets.
-  (l,t,ss,GotoWait g) | walk (Goto g) rs /= (Goto g) ->
-    tell [b,(g,t,[],walk (Goto g) rs)]
-  -- Redirect tails.
-  (l,t,ss,tail) -> tell [(l,t,ss,walk tail rs)]
-
+We process each block with \tt{simplify}, while building a map of new jump
+targets (in State) and a list of blocks retained by this pass (in Writer).  When
+we encounter an empty block, we do not retain it, and add to the map what to
+replace jumps to that block with. Exceptions:
+\begin{enumerate}
+\item The first block in a thread must be retained, since threads are identified
+with their first block.
+\item Blocks with self-loops are not removed, to avoid infinite loops when
+redirecting jumps.
+\end{enumerate}
+To simplify redirection, we always recursively \tt{walk} jump targets through
+the current redirections before adding them to the map.
+\begin{code}
 type Simplifier = RWS () [Block] (Map.Map Tail Tail)
-
-addRedirect l l' = do
-  redirects <- get 
-  modify $ Map.insert l (walk l' redirects)
 
 simplify :: Block -> Simplifier ()
 simplify b = case b of
-  -- Don't remove the empty head block of a thread.
   (l,t,[],_) | l == t -> tell [b]
-  -- Remove and redirect empty blocks.
-  (l,t,[],Goto g) -> do
-    redirects <- get
-    let isLoop = (walk (Goto g) redirects == Goto l)
-    if isLoop then tell [b] else addRedirect (Goto l) (Goto g)
-  (l,t,[],If e c a) -> addRedirect (Goto l) (If e c a)
-  (l,t,[],Exit) -> addRedirect (Goto l) Exit
-  -- No optimizations to perform.
+  (l,t,[],Goto g) -> doRedirect (Goto l) (Goto g) b
+  (l,t,[],If e c a) -> doRedirect (Goto l) (If e c a) b
+  (l,t,[],Exit) -> doRedirect (Goto l) Exit b
   _ -> tell [b]
+
+doRedirect t t' b = do
+  redirects <- get 
+  let tail = walk t' redirects
+  if occursCheck t tail then tell [b] else modify (Map.insert t tail)
 
 walk x xs = case (x,Map.lookup x xs) of
   (_,Just (If e ([],t) ([],t'))) ->
@@ -193,15 +198,36 @@ walk x xs = case (x,Map.lookup x xs) of
   (_,Just x') -> walk x' xs
   (If e ([],t) ([],t'),Nothing) -> If e ([],walk t xs) ([],walk t' xs)
   (_,Nothing) -> x
+
+occursCheck l t = case t of
+  Goto t' -> l == t
+  If _ (_,t') (_,t'') -> occursCheck l t' || occursCheck l t''
+  _ -> False
+\end{code}
+
+After running \tt{simplify} on each block producing a list \tt{rs} of redirects,
+we run each remaining block through \tt{rewriteTail} to redirect all jumps as
+appropriate. Because we do not redirect any \tt{GotoWait} jumps, we must also
+recover any targets of these that we may have removed.
+\begin{code}
+rewriteTail rs b = case b of
+  -- Recover empty GotoWait targets.
+  (l,t,ss,GotoWait g) | walk (Goto g) rs /= (Goto g) ->
+    tell [b,(g,t,[],walk (Goto g) rs)]
+  (l,t,ss,tail) -> tell [(l,t,ss,walk tail rs)]
 \end{code}
 
 % }}}
 \subsection{\tt{optimize}} % {{{
+This pass performs traditional local optimizations with the goal of eliminating
+never-taken branches, to reduce code size and enable block fusion in later
+passes. In particular, we perform constant propagation and constant folding, as
+well as dead code elimination on block tails.
 
+We traverse each block sequentially, carrying around an environment of known
+variable values, replacing occurrences of those variables with their values,
+and performing constant folding where appropriate.
 \begin{code}
-{- optimize performs block-local constant propagation and constant folding, and
-block folding, in order to further reduce code size. -}
-
 optimize bs = map (\b -> evalState (optimizeBlock b) []) bs
 
 type Optimizer = State [(Front.Var,Front.DExpr)]
@@ -210,7 +236,7 @@ optimizeBlock (l,t,ss,tail) = do
   ss' <- mapM optimizeStmt ss
   tail' <- optimizeTail [] tail
   return (l,t,ss',tail')
-  
+
 optimizeExpr expr = 
   case expr of
     Front.Var var -> do
@@ -248,10 +274,17 @@ optimizeStmt stmt =
     Spawn l args -> do
       exprs' <- mapM optimizeExpr (map snd args)
       return $ Spawn l (zip (map fst args) exprs')
+\end{code}
 
+When optimizing tail-position \tt{If}s, we symbolically propagate relational
+expressions into the ``true'' branch, to eliminate redundantly nested \tt{If}s.
+For simplicity, we do not do the same on the ``false'' branch, which occurs
+infrequently in our generated code. Relational expressions are first
+``normalized'' to increase the likelihood of a simplification.
+\begin{code}
 optimizeTail env (If e ([],c) ([],a)) = do
   e' <- optimizeExpr e
-  -- Constant true/false: replace with branch.
+  -- Constant true/false.
   if e' == Front.NumLit 0 then optimizeTail env a else do
   if constantExpr e' then optimizeTail env c else do
   case e' of
@@ -265,46 +298,51 @@ optimizeTail env (If e ([],c) ([],a)) = do
   where impliedR env e = normalizeR e `elem` env
 optimizeTail _ t = return t
 
-{- Helpers for propagation. -}
-
-insertVar v@(Front.Var var) expr = case expr of
-  -- Don't propagate potentially effectful calls.
-  Front.Call _ _ -> return ()
-  -- Insert, and invalidate expressions with var on RHS, including expr.
-  _ -> do
-    modify (\xs -> (v,expr):xs)
-    modify $ filter (\(_,e) -> not (exprContains var e))
-    return ()
-
-exprContains var expr = case expr of
-  Front.Call prim exprs -> any (exprContains var) exprs
-  Front.Arith op e e' -> any (exprContains var) [e,e']
-  Front.ArithUnop op e -> exprContains var e
-  Front.RelnOp op e e' -> any (exprContains var) [e,e']
-  Front.Var v -> v == var
-  _ -> False
-
-{- Helpers for If cleanup. -}
-
 assumptions expr = case expr of
   Front.Arith Front.And e e' -> concatMap assumptions [e,e']
   Front.RelnOp op e e' -> [normalizeR (op,e,e')]
   _ -> []
 
--- Translate RelnOps to a normal form, increasing likelihood of a simplification.
 normalizeR e = case e of
   (Front.Gt,a,b) -> (Front.Lt,b,a)
   (Front.Geq,a,b) -> (Front.Leq,b,a)
   (Front.Eq,a,b) | b > a -> (Front.Eq,b,a)
   (Front.Neq,a,b) | b > a -> (Front.Neq,b,a)
   _ -> e
+\end{code}
 
-{- Perform constant folding. Effectful computations don't occur in the RHS. -}
+\tt{insertVar} adds assignments to the current environment, provided they do not
+contain effects. Once an assignment to \tt{x} is processed, we then invalidate
+any assignments referencing the previous value of \tt{x}.
+\begin{code}
+insertVar v@(Front.Var var) expr = 
+  if containsCall expr then return () else do
+  modify (\xs -> (v,expr):xs)
+  modify $ filter (\(_,e) -> not (containsVar var e))
 
+containsCall expr = case expr of
+  Front.Call _ _ -> True
+  Front.Arith _ e e' -> any containsCall [e,e']
+  Front.ArithUnop _ e -> containsCall e
+  Front.RelnOp _ e e' -> any containsCall [e,e']
+  _ -> False
+
+containsVar var expr = case expr of
+  Front.Call prim exprs -> any (containsVar var) exprs
+  Front.Arith op e e' -> any (containsVar var) [e,e']
+  Front.ArithUnop op e -> containsVar var e
+  Front.RelnOp op e e' -> any (containsVar var) [e,e']
+  Front.Var v -> v == var
+  _ -> False
+\end{code}
+
+\tt{constFold} performs constant folding whenever possible.
+\begin{code}
 fromBool True = Front.NumLit 1
 fromBool False = Front.NumLit 0
 
-constFold (Front.RelnOp op e e') = case (op,e,e') of
+constFold expr@(Front.RelnOp op e e') =
+  if any containsCall [e,e'] then expr else case (op,e,e') of
   (Front.Eq,x,y) | x == y -> Front.NumLit 1
   (Front.Eq,Front.NumLit x,Front.NumLit y) | x /= y -> Front.NumLit 0
   (Front.Lt,x,y) | x == y -> Front.NumLit 0
@@ -319,7 +357,8 @@ constFold (Front.RelnOp op e e') = case (op,e,e') of
   (Front.Neq,Front.NumLit x,Front.NumLit y) | x /= y -> Front.NumLit 1
   _ -> Front.RelnOp op e e'
 
-constFold (Front.Arith op e e') = case (op,e,e') of
+constFold expr@(Front.Arith op e e') =
+  if any containsCall [e,e'] then expr else case (op,e,e') of
   (Front.And,Front.NumLit x,y) -> if x == 0 then Front.NumLit 0 else y
   (Front.And,x,Front.NumLit y) -> if y == 0 then Front.NumLit 0 else x
   (Front.Or,Front.NumLit x,y) -> fromBool (x /= 0)
@@ -346,7 +385,8 @@ constFold (Front.Arith op e e') = case (op,e,e') of
   (Front.Lsh,Front.NumLit 0,_) -> Front.NumLit 0
   _ -> Front.Arith op e e'
 
-constFold (Front.ArithUnop op e) = case (op,e) of
+constFold expr@(Front.ArithUnop op e) = 
+  if containsCall e then expr else case (op,e) of
   (Front.Negate,Front.NumLit x) -> Front.NumLit (-x)
   (Front.Not,Front.NumLit 0) -> Front.NumLit 1
   (Front.Not,Front.NumLit _) -> Front.NumLit 0

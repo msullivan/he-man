@@ -115,4 +115,4 @@ full_write_good_but_broken (fd, e) buf size = do
        (amt_written .= amt_written + amt))
   return amt_written
 
-full_write = full_write_naive
+full_write = full_write_good_but_broken
