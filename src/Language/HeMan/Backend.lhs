@@ -40,7 +40,7 @@ data Stmt = Decl Front.VDecl Front.DExpr
 
 data Tail = If Front.DExpr ([Stmt],Tail) ([Stmt],Tail)
           | Goto Label
-          | GotoWait Label
+          | GotoWait Front.DExpr Label
           | Exit
           deriving (Eq, Ord, Show)
 \end{code}
@@ -139,8 +139,8 @@ flattenStmt stmt bStmts aStmts tail =
     Front.Wait expr ->
       do seqL <- fresh
          newBlock seqL aStmts tail
-         let waitT = GotoWait seqL
-         (bs,tail') <- flattenStmts (bStmts ++ (registerEvent expr)) [] waitT
+         let waitT = GotoWait expr seqL
+         (bs,tail') <- flattenStmts bStmts [] waitT
          return (bs,tail')
     Front.Spawn (vs,ss) args ->
       do threadL <- fresh
@@ -164,6 +164,7 @@ simplifyJumps bs = execWriter $ mapM_ (rewriteTail rs) bs'
   where (_,rs,bs') = runRWS (mapM_ simplify bs) () Map.empty
 \end{code}
 
+<<<<<<< HEAD
 We process each block with \tt{simplify}, while building a map of new jump
 targets (in State) and a list of blocks retained by this pass (in Writer).  When
 we encounter an empty block, we do not retain it, and add to the map what to
@@ -212,7 +213,7 @@ recover any targets of these that we may have removed.
 \begin{code}
 rewriteTail rs b = case b of
   -- Recover empty GotoWait targets.
-  (l,t,ss,GotoWait g) | walk (Goto g) rs /= (Goto g) ->
+  (l,t,ss,GotoWait _ g) | walk (Goto g) rs /= (Goto g) ->
     tell [b,(g,t,[],walk (Goto g) rs)]
   (l,t,ss,tail) -> tell [(l,t,ss,walk tail rs)]
 \end{code}
@@ -412,7 +413,7 @@ findTargets (l,t,ss,tail) = case tail of
     findTargets (l,t,ss,tail)
     findTargets (l,t,ss,tail')
   Goto l' -> modify $ Map.insertWith (++) l' [l]
-  GotoWait l' -> modify $ Map.insertWith (++) l' [l]
+  GotoWait _ l' -> modify $ Map.insertWith (++) l' [l]
   Exit -> return ()
 
 fuseUnique :: (Label,Label) -> State [Block] ()
@@ -517,7 +518,7 @@ collectTail t = case t of
        collectTail tail
        collectTail tail'
   Goto _ -> return ()
-  GotoWait _ -> return ()
+  GotoWait _ _ -> return ()
   Exit -> return ()
 \end{code}
 

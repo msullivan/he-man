@@ -7,12 +7,9 @@
 static void thread_pool_spawn_new(thread_pool_t *pool, int id);
 static void *thread_pool_bottom(void *data);
 
-int thread_pool_init(thread_pool_t **pool, work_func *func, int max_threads)
+int thread_pool_init(thread_pool_t *p, work_func *func, int max_threads)
 {
 	int i, num;
-	
-	/* XXX: things could fail... */
-	thread_pool_t *p = malloc(sizeof(thread_pool_t));
 	
 	p->func = func;
 	p->num_threads = 0;
@@ -28,7 +25,6 @@ int thread_pool_init(thread_pool_t **pool, work_func *func, int max_threads)
 	for (i = 0; i < num; i++)
 		thread_pool_spawn_new(p, i+1);
 
-	*pool = p;	
 	return 0;
 }
 
@@ -53,8 +49,9 @@ static void *thread_pool_bottom(void *data)
 
 	/* and, loop for jobs */
 	for (;;) {
-		while ((work = Q_GET_FRONT(&pool->work_queue)) == NULL)
+		while ((work = Q_GET_FRONT(&pool->work_queue)) == NULL) {
 			pthread_cond_wait(&pool->work_ready, &pool->pool_lock);
+		}
 
 		/* grab work */
 		Q_REMOVE(&pool->work_queue, work, q_link);

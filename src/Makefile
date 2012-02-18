@@ -19,7 +19,6 @@ rt/echod: rt/echo.o ${RUNTIME_OBJ}
 	${CC} ${CFLAGS} $^ -o $@ -laio
 
 rt/echo.o: rt/echo.c ${HEADERS}
-
 rt/echo.c: Echo.hs ${HEMAN_OBJ}
 	ghc $< -e 'compile "$@" main_loop'
 
@@ -28,6 +27,7 @@ rt/echo.c: Echo.hs ${HEMAN_OBJ}
 rt/httpd: rt/http_lib.o rt/http.o ${RUNTIME_OBJ}
 	${CC} ${CFLAGS} $^ -o $@ -laio
 
+rt/echo.o: rt/echo.c ${HEADERS}
 rt/http.c: Http.hs ${HEMAN_OBJ}
 	ghc $< -e 'compile "$@" main_loop'
 

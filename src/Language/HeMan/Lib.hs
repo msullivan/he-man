@@ -10,6 +10,9 @@ mk_nb_event fd modes =
 new_buf :: IntE -> Prog BufferE
 new_buf size =
   callName "buf" (CFn "new_buf") Buffer (curThread, size)
+prepare_event :: EventE -> IntE -> Prog IntE
+prepare_event fd modes =
+  call (CFn "prepare_event") Int (fd, modes)
 
 -- Sugar for individual functions and whatnot
 socket :: IntE -> IntE -> IntE -> Prog FdE
@@ -88,9 +91,12 @@ do_nb_action e action = do
       res .=. action
   return res
 
-accept (fd, e) = do_nb_action e (sock_accept fd)
-do_read (fd, e) buf size = do_nb_action e (sock_read fd buf size)
-do_write (fd, e) buf size = do_nb_action e (sock_write fd buf size)
+accept (fd, e) = do_nb_action e (prepare_event e kEVENT_RD >> sock_accept fd)
+do_read (fd, e) buf size = do_nb_action e
+                           (prepare_event e kEVENT_RD >> sock_read fd buf size)
+do_write (fd, e) buf size = do_nb_action e
+                            (prepare_event e kEVENT_WR >>
+                             sock_write fd buf size)
 
 full_write_naive ev buf size = do
   amt_written <- var "total_written" Int 0
@@ -109,6 +115,7 @@ full_write_good_but_broken (fd, e) buf size = do
   amt_written <- var "total_written" Int 0
   failed <- var "write_failed" Int 0
   while (amt_written .< size .&& failed .== 0) $ do
+    prepare_event e kEVENT_WR
     amt <- sock_write fd (buf +* amt_written) (size - amt_written)
     ifE (amt .== -1) (wait e) $
       (ifE (amt .== 0) (failed .= 1)

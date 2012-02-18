@@ -36,7 +36,7 @@ typedef struct thread_pool_t {
 	pthread_cond_t work_ready;
 } thread_pool_t;
 
-int thread_pool_init(thread_pool_t **pool, work_func *func, int max_threads);
+int thread_pool_init(thread_pool_t *pool, work_func *func, int max_threads);
 int thread_pool_push(thread_pool_t *pool, void *data);
 void thread_pool_debug(thread_pool_t *pool, print_func *print, FILE *out);
 

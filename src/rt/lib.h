@@ -1,3 +1,6 @@
+#ifndef LIB_H
+#define LIB_H
+
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -24,5 +27,9 @@ int make_socket_non_blocking(int sfd);
 int sock_bind_v4(int fd, int addr, int port);
 int print_int(int n);
 
+#define prepare_event(event, new_mode) 0
+
 // This shouldn't be here. Programs should be able to include other headers
 int http_parse(char *buf, int len);
+
+#endif
