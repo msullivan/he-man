@@ -591,6 +591,20 @@ printCFG (bs,_) = do
     mapM_ (\from -> putStr (show from ++ " -> " ++ show to ++ "\n"))
     froms) cfg
   putStrLn "}"
+
+-- printCFG' looks better but DOT draws it really poorly :(
+printCFG' (bs,_) = do
+  putStrLn "digraph G {"
+  mapM_ (\(l,t,_,tail) -> do
+    when (l == t) $ putStrLn (show l ++ " [shape = rectangle]")
+    printTailEdges l tail) bs
+  putStrLn "}"
+
+printTailEdges l tail = case tail of
+  Goto l' -> putStrLn (show l ++ " -> " ++ show l')
+  GotoWait _ l' -> putStrLn (show l ++ " -> " ++ show l' ++ " [style = dashed]")
+  If _ (_,c) (_,a) -> mapM_ (printTailEdges l) [c,a]
+  Exit -> return ()
 \end{code}
 
 % }}}
