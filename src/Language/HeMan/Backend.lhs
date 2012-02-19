@@ -411,13 +411,50 @@ This pass reduces the number of blocks in the output code by fusing existing
 ones. Note that we cannot remove \tt{GotoWait} jumps, and due to
 \tt{simplifyJumps}, no inlinable empty blocks remain.
 \begin{code}
-fuseBlocks bs = fuseUnique uniquelyTargeted bs
+fuseBlocks bs = fuseUnique uniquelyTargeted bs'
   where cfg = buildCFG bs
+        -- Exit block fusion.
+        exitBlocks = filter isExitBlock bs
+        (bs',cfg') = execState (mapM_ fuseExits exitBlocks) (bs,cfg)
+        -- Uniquely-targeted block fusion.
         uniquelyTargeted = map (\(x,[y]) -> (y,x))
-          (Map.toList $ Map.filter (\ls -> length ls == 1) cfg)
+          (Map.toList $ Map.filter (\ls -> length ls == 1) cfg')
 \end{code}
 
-First, we find all uniquely-targeted blocks and inline them at the call site, as
+First, we find all \tt{Exit} blocks and inline them where they are called; they
+contain very little code, so this allows threads to clean up without yielding
+first.
+\begin{code}
+fuseExits :: Block -> State ([Block],Map.Map Label [Label]) ()
+fuseExits b = if getLabel b == getThread b then return () else do
+  (bs,cfg) <- get
+  case Map.lookup (getLabel b) cfg of
+    Nothing -> return ()
+    Just xs -> do
+    let (froms,bs') = partition (\x -> getLabel x `elem` xs) bs
+    let (froms',failed) = partitionMaybe (\f -> fuse f b) froms
+    if null failed
+      then do
+        let cfg' = Map.delete (getLabel b) cfg
+        let bs'' = filter (/= b) bs'
+        put (froms' ++ bs'',cfg')
+      else do
+        let cfg' = Map.insert (getLabel b) (map getLabel failed) cfg
+        put (froms' ++ failed ++ bs',cfg')
+
+partitionMaybe :: (a -> Maybe b) -> [a] -> ([b],[a])
+partitionMaybe f [] = ([],[])
+partitionMaybe f (x:xs) =
+  let (js,ns) = partitionMaybe f xs in
+  case f x of
+    Nothing -> (js,x:ns)
+    Just x' -> (x':js,ns)
+
+isExitBlock (_,_,_,Exit) = True
+isExitBlock _ = False
+\end{code}
+
+Next, we find all uniquely-targeted blocks and inline them at the call site, as
 long as the target block is not the first block in a thread.
 \begin{code}
 fuseUnique [] bs = bs
