@@ -51,8 +51,7 @@ variables needed across multiple blocks.
 \begin{code}
 backend :: Front.Block -> ([Block],[Thread])
 backend = collectFrees . (mapFst optimizations) . flattenPrgm
-  where optimizations = optimize . simplifyJumps
-        --optimizations = fuseBlocks . optimize . simplifyJumps
+  where optimizations = fuseBlocks . optimize . simplifyJumps
         --optimizations = id
 
 mapFst f (x,y) = (f x,y)
@@ -164,7 +163,6 @@ simplifyJumps bs = execWriter $ mapM_ (rewriteTail rs) bs'
   where (_,rs,bs') = runRWS (mapM_ simplify bs) () Map.empty
 \end{code}
 
-<<<<<<< HEAD
 We process each block with \tt{simplify}, while building a map of new jump
 targets (in State) and a list of blocks retained by this pass (in Writer).  When
 we encounter an empty block, we do not retain it, and add to the map what to
@@ -409,54 +407,62 @@ constFold expr@(Front.ArithUnop op e) =
 
 % }}}
 \subsection{\tt{fuseBlocks}} % {{{
-
+This pass reduces the number of blocks in the output code by fusing existing
+ones. Note that we cannot remove \tt{GotoWait} jumps, and due to
+\tt{simplifyJumps}, no inlinable empty blocks remain.
 \begin{code}
-{- fuseBlocks finds blocks targeted by only one Goto, removing and inlining them
-at that Goto. -}
+fuseBlocks bs = fuseUnique uniquelyTargeted bs
+  where cfg = buildCFG bs
+        uniquelyTargeted = map (\(x,[y]) -> (y,x))
+          (Map.toList $ Map.filter (\ls -> length ls == 1) cfg)
+\end{code}
 
-fuseBlocks bs = execState (mapM_ fuseUnique uniqueTargets) bs
-  where targets = execState (mapM_ findTargets bs) Map.empty
-        uniqueTargets = map (\(x,[y]) -> (x,y))
-          (Map.toList $ Map.filter (\ls -> length ls == 1) targets)
-        
--- Generates a map from blocks to a list of blocks targeting them.
-findTargets :: Block -> State (Map.Map Label [Label]) ()
-findTargets (l,t,ss,tail) = case tail of
+First, we find all uniquely-targeted blocks and inline them at the call site, as
+long as the target block is not the first block in a thread.
+\begin{code}
+fuseUnique [] bs = bs
+fuseUnique ((from,to):rs) bs =
+  let ([toBlock],bs') = partition (\b -> getLabel b == to) bs in
+  if getLabel toBlock == getThread toBlock then fuseUnique rs bs else
+  let ([fromBlock],bs'') = partition (\b -> getLabel b == from) bs' in
+  case fuse fromBlock toBlock of
+    Nothing -> fuseUnique rs bs
+    Just fromBlock' -> fuseUnique (updateTargets (from,to) rs) (fromBlock':bs'')
+
+updateTargets (from,to) = map (\(f,t) -> if f == to then (from,t) else (f,t))
+\end{code}
+
+\tt{buildCFG} generates a map from labels to all blocks targeting them.
+\begin{code}
+buildCFG bs = execState (mapM_ getTargets bs) Map.empty
+
+getTargets :: Block -> State (Map.Map Label [Label]) ()
+getTargets (l,t,ss,tail) = case tail of
   If expr ([],tail) ([],tail') -> do
-    findTargets (l,t,ss,tail)
-    findTargets (l,t,ss,tail')
+    getTargets (l,t,ss,tail)
+    getTargets (l,t,ss,tail')
   Goto l' -> modify $ Map.insertWith (++) l' [l]
   GotoWait _ l' -> modify $ Map.insertWith (++) l' [l]
   Exit -> return ()
+\end{code}
 
-fuseUnique :: (Label,Label) -> State [Block] ()
-fuseUnique (to,from) = do
-  bs <- get
-  let ([toBlock],bs') = partition (\b -> getLabel b == to) bs
-  -- Don't fuse if target is the head of a thread.
-  if getLabel toBlock == getThread toBlock then return () else do
-  let ([fromBlock],bs'') = partition (\b -> getLabel b == from) bs'
-  case fuse fromBlock toBlock of
-    Nothing -> return ()
-    Just fromBlock' -> put (fromBlock':bs'')
-
-{- Generic block fusion routines. -}
-
--- Fuse two blocks, or re-fuse to do so (ha ha).
+\tt{fuse} takes two blocks and inlines the second at every jump to it in the
+first. It returns the new block if fusion succeeds, or \tt{Nothing} otherwise.
+We cannot inline at \tt{GotoWait} jumps.
+\begin{code}
 fuse (fromL,fromT,fromSs,fromTail) (toL,_,toSs,toTail) =
   case runState (fuseIf fromTail toL toSs toTail) False of
     (_,False) -> Nothing
     (newTail,True) -> Just (fromL,fromT,fromSs,newTail)
 
--- Perform fusion inside Ifs, but not GotoWaits.
--- Returned state is True if any replacements occur.
+-- State is True if any replacements occur.
 fuseIf :: Tail -> Label -> [Stmt] -> Tail -> State Bool Tail
 fuseIf tail l newSs newTail = case tail of
   If e (cs,Goto cl) a | cl == l -> do
-    modify (|| True)
+    put True
     fuseIf (If e (cs ++ newSs,newTail) a) l newSs newTail
   If e c (as,Goto al) | al == l -> do
-    modify (|| True)
+    put True
     fuseIf (If e c (as ++ newSs,newTail)) l newSs newTail
   If e (cs,c) (as,a) -> do
     c' <- fuseIf c l newSs newTail
