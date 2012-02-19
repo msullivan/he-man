@@ -2,7 +2,7 @@ module Language.HeMan
   (module Language.HeMan.Syntax,
    module Language.HeMan.Lib,
    compile,
-   testFront, testBack, testAll)
+   testFront, testBack, testCFG, testAll)
   where
 
 import Language.HeMan.Syntax
@@ -16,5 +16,5 @@ compile file p = do writeFile file (codegen $ backend $ desugar p)
 
 testFront = pretty . desugar
 testBack = pretty . fst . backend . desugar
+testCFG = printCFG . backend . desugar
 testAll = codegen . backend . desugar
-

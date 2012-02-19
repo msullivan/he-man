@@ -5,7 +5,7 @@ which is straightforwardly translated to C in \tt{Language.HeMan.Codegen}.
 
 \begin{code}
 module Language.HeMan.Backend
-  (Stmt(..), Tail(..), Block, Thread, backend) where
+  (Stmt(..), Tail(..), Block, Thread, backend, printCFG) where
 
 import qualified Language.HeMan.Syntax as Front
   (Stmt(..), DExpr(..), VDecl, Prim(..),
@@ -438,7 +438,7 @@ buildCFG bs = execState (mapM_ getTargets bs) Map.empty
 
 getTargets :: Block -> State (Map.Map Label [Label]) ()
 getTargets (l,t,ss,tail) = case tail of
-  If expr ([],tail) ([],tail') -> do
+  If expr (_,tail) (_,tail') -> do
     getTargets (l,t,ss,tail)
     getTargets (l,t,ss,tail')
   Goto l' -> modify $ Map.insertWith (++) l' [l]
@@ -539,6 +539,21 @@ collectTail t = case t of
   Goto _ -> return ()
   GotoWait _ _ -> return ()
   Exit -> return ()
+\end{code}
+
+% }}}
+\subsection{CFG printer} % {{{
+This function prints a DOT representation of the emitted code's control flow
+graph.
+
+\begin{code}
+printCFG (bs,_) = do
+  let cfg = Map.toList (buildCFG bs)
+  putStrLn "digraph G {"
+  mapM_ (\(to,froms) ->
+    mapM_ (\from -> putStr (show from ++ " -> " ++ show to ++ "\n"))
+    froms) cfg
+  putStrLn "}"
 \end{code}
 
 % }}}
