@@ -17,7 +17,6 @@
 
 #include "variable_queue.h"
 #include "mainloop.h"
-//#include "thrpool.h"
 
 #define MAX_EVENTS 10
 #define MAX_AIO_EVENTS 100 // dunno what this should be...
@@ -26,7 +25,6 @@
 int next_tid = 0;
 
 static struct {
-	bool expect_aio;
 	int epoll_fd;
 	io_context_t aio_ctx;
 	int aio_eventfd;
@@ -40,8 +38,8 @@ static struct {
 char *new_buf(thread_t *thread, int size) {
 	buf_t *buf = malloc(sizeof(buf_t) + size);
 	if (!buf) fail(1, "allocating buffer");
-	Q_INIT_ELEM(buf, q_link);
-	Q_INSERT_TAIL(&thread->bufs, buf, q_link);
+	Q_INIT_ELEM(buf, gc_link);
+	Q_INSERT_TAIL(&thread->bufs, buf, gc_link);
 	return buf->buffer;
 }
 
@@ -61,7 +59,7 @@ event_t *mk_nb_event(thread_t *thread, int fd, int mode)
 	if (epoll_ctler(EPOLL_CTL_ADD, fd, mode|EPOLLET, e) < 0)
 		fail(1, "epoll_ctl");
 
-	Q_INSERT_TAIL(&thread->nb_events, e, q_link);
+	Q_INSERT_TAIL(&thread->nb_events, e, gc_link);
 
 	return e;
 }
@@ -87,7 +85,7 @@ void free_thread(thread_t *thread)
 	}
 	buf_t *buf;
 	while ((buf = Q_GET_HEAD(&thread->bufs))) {
-		Q_REMOVE(&thread->bufs, buf, q_link);
+		Q_REMOVE(&thread->bufs, buf, gc_link);
 		free_buf(buf);
 	}
 
@@ -112,7 +110,6 @@ int epoll_ctler(int op, int fd, uint32_t events, void *ptr)
 void make_runnable(thread_t *t)
 {
 	Q_INSERT_TAIL(&state.sched_queue, t, q_link);
-	//thread_pool_push(&state.sched_queue, t);
 }
 
 
@@ -165,20 +162,19 @@ static void do_poll(bool can_sleep)
 	int aio_cnt = io_getevents(state.aio_ctx, 0, MAX_EVENTS,
 	                           aio_events, NULL);
 	if (aio_cnt < 0) { fail2(1, -aio_cnt, "io_getevents"); }
-	state.expect_aio = aio_cnt == MAX_EVENTS;
+	bool expect_aio = aio_cnt == MAX_EVENTS;
 	for (int i = 0; i < aio_cnt; i++) {
 		handle_aio_event(&aio_events[i]);
 	}
 
 	// If we aren't expecting aio, block indefinitely, otherwise
 	// just poll.
-	int epoll_timeout = state.expect_aio || !can_sleep ? 0 : -1;
+	int epoll_timeout = expect_aio || !can_sleep ? 0 : -1;
 	int epoll_cnt = epoll_wait(state.epoll_fd, epoll_events,
 	                           MAX_EVENTS, epoll_timeout);
 	for (int i = 0; i < epoll_cnt; i++) {
 		if (epoll_events[i].data.ptr == state.aio_dummy_event) {
 			uint64_t eventfd_val;
-			state.expect_aio = true;
 			if (read(state.aio_eventfd, &eventfd_val,
 			         sizeof(eventfd_val)) < 0)
 				fail(1, "eventfd read");
