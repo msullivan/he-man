@@ -408,39 +408,45 @@ constFold expr@(Front.ArithUnop op e) =
 % }}}
 \subsection{\tt{fuseBlocks}} % {{{
 This pass reduces the number of blocks in the output code by fusing existing
-ones. Note that we cannot remove \tt{GotoWait} jumps, and due to
-\tt{simplifyJumps}, no inlinable empty blocks remain.
+ones. Note that we cannot remove \tt{GotoWait} jumps.
 \begin{code}
 fuseBlocks bs = fuseUnique uniquelyTargeted bs'
   where cfg = buildCFG bs
-        -- Exit block fusion.
-        exitBlocks = filter isExitBlock bs
-        (bs',cfg') = execState (mapM_ fuseExits exitBlocks) (bs,cfg)
+        -- Exit/GotoWait block fusion.
+        blocks = filter isExitOrGotoWait bs
+        (bs',cfg') = execState (mapM_ fuseNonUnique blocks) (bs,cfg)
         -- Uniquely-targeted block fusion.
         uniquelyTargeted = map (\(x,[y]) -> (y,x))
           (Map.toList $ Map.filter (\ls -> length ls == 1) cfg')
 \end{code}
 
-First, we find all \tt{Exit} blocks and inline them where they are called; they
-contain very little code, so this allows threads to clean up without yielding
-first.
+First, we find all \tt{Exit} and \tt{GotoWait} blocks and inline them where they
+are called; they contain very little code, so this allows threads to clean up or
+wait for IO without yielding first.
+
+\tt{fuseNonUnique} takes a block to fuse, and carries around the program and its
+CFG. First, it uses the graph to extract all blocks targeting the to-be-inlined
+block, then attempts fusion on each one. For each successful fusion, we patch up
+the CFG to add a jump from the modified block to the target of the inlined
+block. If all fusions succeed, we remove the inlined block from the program and
+CFG entirely. Otherwise, we update its list of targets in the CFG.
 \begin{code}
-fuseExits :: Block -> State ([Block],Map.Map Label [Label]) ()
-fuseExits b = if getLabel b == getThread b then return () else do
+fuseNonUnique :: Block -> State ([Block],Map.Map Label [Label]) ()
+fuseNonUnique b =
+  if getLabel b == getThread b then return () else do
   (bs,cfg) <- get
-  case Map.lookup (getLabel b) cfg of
-    Nothing -> return ()
-    Just xs -> do
-    let (froms,bs') = partition (\x -> getLabel x `elem` xs) bs
-    let (froms',failed) = partitionMaybe (\f -> fuse f b) froms
-    if null failed
-      then do
-        let cfg' = Map.delete (getLabel b) cfg
-        let bs'' = filter (/= b) bs'
-        put (froms' ++ bs'',cfg')
-      else do
-        let cfg' = Map.insert (getLabel b) (map getLabel failed) cfg
-        put (froms' ++ failed ++ bs',cfg')
+  let (froms,bs') = maybe ([],bs)
+                    (\xs -> partition (\x -> getLabel x `elem` xs) bs) $
+                    Map.lookup (getLabel b) cfg
+  let (froms',failed) = partitionMaybe (\f -> fuse f b) froms
+  let cfg' = addGotoWaitTarget b (map getLabel froms') cfg
+  if null failed
+    then do
+      let cfg'' = removeGotoWaitTarget b $ Map.delete (getLabel b) cfg'
+      put (froms' ++ filter (/= b) bs',cfg'')
+    else do
+      let cfg'' = Map.insert (getLabel b) (map getLabel failed) cfg'
+      put (froms' ++ failed ++ bs',cfg'')
 
 partitionMaybe :: (a -> Maybe b) -> [a] -> ([b],[a])
 partitionMaybe f [] = ([],[])
@@ -450,8 +456,18 @@ partitionMaybe f (x:xs) =
     Nothing -> (js,x:ns)
     Just x' -> (x':js,ns)
 
-isExitBlock (_,_,_,Exit) = True
-isExitBlock _ = False
+addGotoWaitTarget b labels cfg = case b of
+  (_,_,_,GotoWait _ target) -> Map.adjust (++ labels) target cfg
+  _ -> cfg
+
+removeGotoWaitTarget b cfg = case b of
+  (l,_,_,GotoWait _ target) -> Map.adjust (delete l) target cfg
+  _ -> cfg
+
+isExitOrGotoWait b = case b of
+  (_,_,_,Exit) -> True
+  (_,_,_,GotoWait _ _) -> True
+  _ -> False
 \end{code}
 
 Next, we find all uniquely-targeted blocks and inline them at the call site, as
@@ -459,12 +475,16 @@ long as the target block is not the first block in a thread.
 \begin{code}
 fuseUnique [] bs = bs
 fuseUnique ((from,to):rs) bs =
-  let ([toBlock],bs') = partition (\b -> getLabel b == to) bs in
+  let (toBlock,bs') = partitionBlocks to bs in
   if getLabel toBlock == getThread toBlock then fuseUnique rs bs else
-  let ([fromBlock],bs'') = partition (\b -> getLabel b == from) bs' in
+  let (fromBlock,bs'') = partitionBlocks from bs' in
   case fuse fromBlock toBlock of
     Nothing -> fuseUnique rs bs
     Just fromBlock' -> fuseUnique (updateTargets (from,to) rs) (fromBlock':bs'')
+
+partitionBlocks l bs = case partition (\b -> getLabel b == l) bs of
+  ([b],bs') -> (b,bs')
+  _ -> error $ "Block " ++ show l ++ " missing in partitionBlocks."
 
 updateTargets (from,to) = map (\(f,t) -> if f == to then (from,t) else (f,t))
 \end{code}
