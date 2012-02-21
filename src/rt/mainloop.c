@@ -25,7 +25,6 @@
 int next_tid = 0;
 
 static struct {
-	bool expect_aio;
 	int epoll_fd;
 	io_context_t aio_ctx;
 	int aio_eventfd;
@@ -163,20 +162,19 @@ static void do_poll(bool can_sleep)
 	int aio_cnt = io_getevents(state.aio_ctx, 0, MAX_EVENTS,
 	                           aio_events, NULL);
 	if (aio_cnt < 0) { fail2(1, -aio_cnt, "io_getevents"); }
-	state.expect_aio = aio_cnt == MAX_EVENTS;
+	bool expect_aio = aio_cnt == MAX_EVENTS;
 	for (int i = 0; i < aio_cnt; i++) {
 		handle_aio_event(&aio_events[i]);
 	}
 
 	// If we aren't expecting aio, block indefinitely, otherwise
 	// just poll.
-	int epoll_timeout = state.expect_aio || !can_sleep ? 0 : -1;
+	int epoll_timeout = expect_aio || !can_sleep ? 0 : -1;
 	int epoll_cnt = epoll_wait(state.epoll_fd, epoll_events,
 	                           MAX_EVENTS, epoll_timeout);
 	for (int i = 0; i < epoll_cnt; i++) {
 		if (epoll_events[i].data.ptr == state.aio_dummy_event) {
 			uint64_t eventfd_val;
-			state.expect_aio = true;
 			if (read(state.aio_eventfd, &eventfd_val,
 			         sizeof(eventfd_val)) < 0)
 				fail(1, "eventfd read");
