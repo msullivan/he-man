@@ -17,7 +17,6 @@
 
 #include "variable_queue.h"
 #include "mainloop.h"
-//#include "thrpool.h"
 
 #define MAX_EVENTS 10
 #define MAX_AIO_EVENTS 100 // dunno what this should be...
@@ -40,8 +39,8 @@ static struct {
 char *new_buf(thread_t *thread, int size) {
 	buf_t *buf = malloc(sizeof(buf_t) + size);
 	if (!buf) fail(1, "allocating buffer");
-	Q_INIT_ELEM(buf, q_link);
-	Q_INSERT_TAIL(&thread->bufs, buf, q_link);
+	Q_INIT_ELEM(buf, gc_link);
+	Q_INSERT_TAIL(&thread->bufs, buf, gc_link);
 	return buf->buffer;
 }
 
@@ -61,7 +60,7 @@ event_t *mk_nb_event(thread_t *thread, int fd, int mode)
 	if (epoll_ctler(EPOLL_CTL_ADD, fd, mode|EPOLLET, e) < 0)
 		fail(1, "epoll_ctl");
 
-	Q_INSERT_TAIL(&thread->nb_events, e, q_link);
+	Q_INSERT_TAIL(&thread->nb_events, e, gc_link);
 
 	return e;
 }
@@ -87,7 +86,7 @@ void free_thread(thread_t *thread)
 	}
 	buf_t *buf;
 	while ((buf = Q_GET_HEAD(&thread->bufs))) {
-		Q_REMOVE(&thread->bufs, buf, q_link);
+		Q_REMOVE(&thread->bufs, buf, gc_link);
 		free_buf(buf);
 	}
 
@@ -112,7 +111,6 @@ int epoll_ctler(int op, int fd, uint32_t events, void *ptr)
 void make_runnable(thread_t *t)
 {
 	Q_INSERT_TAIL(&state.sched_queue, t, q_link);
-	//thread_pool_push(&state.sched_queue, t);
 }
 
 

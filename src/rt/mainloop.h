@@ -27,12 +27,11 @@ Q_NEW_HEAD(buf_queue_t, buf_t);
 typedef bool thread_cont(struct thread_t *thread);
 
 typedef struct buf_t {
-	Q_NEW_LINK(buf_t) q_link;
+	Q_NEW_LINK(buf_t) gc_link;
 	char buffer[];
 } buf_t;
 
 typedef struct thread_t {
-	//work_item_t work_item;
 	Q_NEW_LINK(thread_t) q_link;
 	int tid;
 	event_queue_t pending_events;
