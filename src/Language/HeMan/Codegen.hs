@@ -82,7 +82,8 @@ translateStmt vars stmt =
         [Right $ cDecl [typ] indirs x (Just $ transE e)]
     Assign e1 e2 -> [Left $ cExpr (cAssign (transE e1) (transE e2))]
     Exp e -> [Left $ cExpr $ transE e]
-    Spawn thd args -> makeT:setupTVars ++ setupTRun where
+    Spawn thd args -> [Left $ cCompound stmts] where
+      stmts = makeT:setupTVars ++ setupTRun
       thread = threadName thd
       makeT = Right $ cDecl [cType thread] [cPtr] "new_thread" $ 
         Just $ cCall (cVar $ "mk_" ++ thread) []
