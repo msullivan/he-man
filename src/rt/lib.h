@@ -27,7 +27,11 @@ int make_socket_non_blocking(int sfd);
 int sock_bind_v4(int fd, int addr, int port);
 int print_int(int n);
 
-#define prepare_event(event, new_mode) (event->mode = new_mode)
+#define prepare_event(event, new_mode) (event->u.nb.mode = new_mode)
+#define read_msg_tag(msg) (msg->tag)
+#define read_msg_payload(msg) (msg->payload)
+#define buf_to_data(buf) ({msg_data_t data; data.p = buf; data})
+#define data_to_buf(data) (data.p)
 
 // This shouldn't be here. Programs should be able to include other headers
 int http_parse(char *buf, int len);

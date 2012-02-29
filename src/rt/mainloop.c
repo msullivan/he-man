@@ -20,7 +20,7 @@
 #include "variable_queue.h"
 #include "mainloop.h"
 
-#define MT_RUNTIME 1
+#define MT_RUNTIME 0
 
 #define MAX_EVENTS 10
 #define MAX_AIO_EVENTS 100 // dunno what this should be...
@@ -53,6 +53,25 @@ static inline void sched_unlock(void) {
 #endif
 }
 
+// refcount stuff
+void inc_refcount(void *p) {
+	int *rc = p;
+	assert(*rc > 0);
+	(*rc)++; // XXX: smp
+}
+void dec_refcount(void *p) {
+	int *rc = p;
+	assert(*rc > 0);
+	if (!--(*rc)) // XXX: smp
+		free(p);
+}
+
+static buf_t *get_buffer(char *buf) {
+	return (buf_t *)(buf - offsetof(buf_t, buffer));
+}
+void inc_buf_refcount(char *buf) { inc_refcount(get_buffer(buf)); }
+void dec_buf_refcount(char *buf) { dec_refcount(get_buffer(buf)); }
+
 // XXX: we want something faster than this
 // and maybe want to recover from failure
 char *new_buf(thread_t *thread, int size) {
@@ -62,6 +81,22 @@ char *new_buf(thread_t *thread, int size) {
 	Q_INSERT_TAIL(&thread->bufs, buf, gc_link);
 	return buf->buffer;
 }
+char *new_rc_buf(thread_t *thread, int size) {
+	buf_t *buf = malloc(sizeof(buf_t) + size);
+	if (!buf) fail(1, "allocating buffer");
+	buf->rc = 1;
+	return buf->buffer;
+}
+
+channel_t *new_channel(void) {
+	channel_t *ch = calloc(1, sizeof(channel_t));
+	if (!ch) fail(1, "allocating channel");
+	ch->rc = 1;
+	ch->ev.type = EVENT_CHANNEL;
+	ch->ev.u.ch = ch;
+	return ch;
+}
+
 
 // XXX: we want something faster than this
 // and maybe want to recover from failure
@@ -74,8 +109,9 @@ event_t *mk_event(void) {
 event_t *mk_nb_event(thread_t *thread, int fd, int mode)
 {
 	event_t *e = mk_event();
-	e->id = fd;
-	e->mode = mode;
+	e->type = EVENT_NB;
+	e->u.nb.fd = fd;
+	e->u.nb.mode = mode;
 
 	if (epoll_ctler(EPOLL_CTL_ADD, fd, 0, e) < 0)
 		fail(1, "epoll_ctl: %d", fd);
@@ -87,8 +123,8 @@ event_t *mk_nb_event(thread_t *thread, int fd, int mode)
 
 static void free_nb_event(event_t *event)
 {
-	epoll_ctler(EPOLL_CTL_DEL, event->id, 0, NULL);
-	close(event->id);
+	epoll_ctler(EPOLL_CTL_DEL, event->u.nb.fd, 0, NULL);
+	close(event->u.nb.fd);
 	free(event);
 }
 
@@ -114,16 +150,44 @@ void free_thread(thread_t *thread)
 }
 
 
-void register_event(thread_t *thread, event_t *e)
+void register_nb_event(thread_t *thread, event_t *e)
 {
 	// helgrind will report a data race having to do with this, but
 	// I'm pretty sure it's actually fine. The event pointer is handed
 	// off through epoll.
 	e->thread = thread;
 	// XXX: this only makes sense for epoll events, not AIO ones
-	if (epoll_ctler(EPOLL_CTL_MOD, e->id, e->mode|EPOLLONESHOT, e) < 0)
-		fail(1, "epoll_ctl: %d", e->id);
+	if (epoll_ctler(EPOLL_CTL_MOD, e->u.nb.fd,
+	                e->u.nb.mode|EPOLLONESHOT, e) < 0)
+		fail(1, "epoll_ctl: %d", e->u.nb.fd);
 }
+
+void register_channel_event(thread_t *thread, event_t *e)
+{
+	// XXX: locking
+	channel_t *ch = e->u.ch;
+
+	// if there is data in the channel, keep running
+	if (Q_GET_HEAD(&ch->msgs)) {
+		make_runnable(thread);
+	} else {
+		e->thread = thread;
+	}
+}
+
+
+void register_event(thread_t *thread, event_t *e)
+{
+	switch (e->type) {
+	case EVENT_NB:
+		register_nb_event(thread, e);
+		break;
+	case EVENT_CHANNEL:
+		register_channel_event(thread, e);
+		break;
+	}
+}
+
 
 int epoll_ctler(int op, int fd, uint32_t events, void *ptr)
 {
@@ -146,16 +210,45 @@ static void handle_event(event_t *event)
 	thread_t *t = event->thread;
 	// If nobody gives a shit, just leave
 	if (!t) return;
+	event->thread = NULL;
 
 	// Schedule the thread we woke up
 	make_runnable(t);
 }
 
+void channel_send(channel_t *ch, int tag, data_t payload)
+{
+	// XXX: locking
+	msg_t *msg = calloc(1, sizeof(msg_t));
+	if (!msg) fail(1, "allocating msg");
+	msg->data.tag = tag;
+	msg->data.payload = payload;
+	Q_INSERT_TAIL(&ch->msgs, msg, q_link);
+	handle_event(&ch->ev);
+}
+msg_data_t channel_recv(channel_t *ch)
+{
+	msg_data_t ret = {-1, {0}};
+	msg_t *msg;
+	// XXX: locking
+	if ((msg = Q_GET_HEAD(&ch->msgs))) {
+		Q_REMOVE(&ch->msgs, msg, q_link);
+		ret = msg->data;
+		free(msg);
+	}
+
+	return ret;
+}
+
+
 static void handle_aio_event(struct io_event *event)
 {
+	abort();
+	/*
 	event_t *ev = event->data;
 	ev->complete = true;
 	handle_event(ev);
+	*/
 }
 static void handle_epoll_event(struct epoll_event *event)
 {

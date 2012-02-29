@@ -10,6 +10,10 @@ mk_nb_event fd modes =
 new_buf :: IntE -> Prog BufferE
 new_buf size =
   callName "buf" (CFn "new_buf") Buffer (curThread, size)
+new_rc_buf :: IntE -> Prog BufferE
+new_rc_buf size =
+  callName "buf" (CFn "new_rc_buf") Buffer (curThread, size)
+
 prepare_event :: EventE -> IntE -> Prog ()
 prepare_event fd modes =
   call' (CFn "prepare_event") (fd, modes)
@@ -59,6 +63,41 @@ file_read fd buf len =
 file_write :: FdE -> BufferE -> IntE -> Prog IntE
 file_write fd buf len =
   callName "amt_written" (CFn "write") Int (fd, buf, len)
+
+-- Things for channels and other bullshit
+inc_refcount :: Expr a -> Prog ()
+inc_refcount p = call' (CFn "inc_refcount") (p)
+dec_refcount :: Expr a -> Prog ()
+dec_refcount p = call' (CFn "dec_refcount") (p)
+inc_buf_refcount :: Expr Buffer -> Prog ()
+inc_buf_refcount p = call' (CFn "inc_buf_refcount") (p)
+dec_buf_refcount :: Expr Buffer -> Prog ()
+dec_buf_refcount p = call' (CFn "dec_buf_refcount") (p)
+
+-- We don't want people doing any lower level operations on
+-- messages.
+read_msg :: Expr Msg -> Prog (IntE, Expr Data)
+read_msg m =
+  do tag <- callName "tag" (CFn "read_msg_tag") Int (m)
+     payload <- callName "payload" (CFn "read_msg_payload") Data (m)
+     return (tag, payload)
+
+new_channel :: Prog ChannelE
+new_channel =
+  callName "ch" (CFn "new_channel") Channel ()
+channel_send :: ChannelE -> IntE -> DataE -> Prog ()
+channel_send ch tag payload =
+  call' (CFn "channel_send") (ch, tag, payload)
+channel_recv :: (ChannelE, EventE) -> Prog (IntE, Expr Data)
+channel_recv (ch, e) =
+  do wait e
+     msg <- call (CFn "channel_recv") Msg ch
+     read_msg msg
+
+buf_to_data :: BufferE -> Prog DataE
+buf_to_data b = callName "buf" (CFn "buf_to_data") Data (b)
+data_to_buf :: DataE -> Prog BufferE
+data_to_buf d = callName "data" (CFn "data_to_buf") Buffer (d)
 
 
 -- For debugging

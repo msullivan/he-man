@@ -122,7 +122,9 @@ translateType t =
     IFD -> (cInt,[])
     IEvent -> (cType "event_handle",[])
     IBuffer -> (cChar,[cPtr])
-
+    IData -> (cType "data_t",[])
+    IMsg -> (cType "msg_data_t",[])
+    IChannel -> (cType "channel_t",[cPtr])
 --}}}
 --{{{ Operators
 

@@ -19,6 +19,9 @@ data FD
 data Buffer
 data Event
 data Thread
+data Data
+data Msg
+data Channel
 
 data Stmt = Decl VDecl DExpr
           | While DExpr Block
@@ -30,7 +33,7 @@ data Stmt = Decl VDecl DExpr
           | Exit
           deriving (Eq, Ord, Show)
 
-data IType = IInt | IBool | IFD | IBuffer | IEvent -- | ThreadT
+data IType = IInt | IBool | IFD | IBuffer | IEvent | IData | IMsg | IChannel
           deriving (Eq, Ord, Show)
 
 data DExpr = Call Prim [DExpr]
@@ -65,6 +68,9 @@ data Type a where
   FD :: Type FD
   Buffer :: Type Buffer
   Event :: Type Event
+  Data :: Type Data
+  Msg :: Type Msg
+  Channel :: Type Channel
 
 mkIType :: Type a -> IType
 mkIType Int = IInt
@@ -72,6 +78,9 @@ mkIType Bool = IBool
 mkIType FD = IFD
 mkIType Buffer = IBuffer
 mkIType Event = IEvent
+mkIType Data = IData
+mkIType Msg = IMsg
+mkIType Channel = IChannel
 
 newtype Expr a = E DExpr
                deriving (Eq, Ord, Show)
@@ -81,6 +90,8 @@ type FdE = Expr FD
 type BoolE = Expr Bool
 type BufferE = Expr Buffer
 type EventE = Expr Event
+type ChannelE = Expr Channel
+type DataE = Expr Data
 
 -- Lift functions of DExprs to ones over Exprs
 typ1 :: (DExpr -> DExpr) -> (Expr a -> Expr b)
