@@ -3,7 +3,7 @@ HEMAN_OBJ=Language/HeMan.o
 RUNTIME_OBJ=rt/mainloop.o rt/lib.o
 HEADERS=rt/mainloop.h rt/lib.h rt/variable_queue.h
 
-all: rt/echod rt/httpd
+all: rt/echod rt/httpd rt/echod2
 
 .PHONY: all clean reallyclean
 
@@ -21,6 +21,16 @@ rt/echod: rt/echo.o ${RUNTIME_OBJ}
 rt/echo.o: rt/echo.c ${HEADERS}
 rt/echo.c: Echo.hs ${HEMAN_OBJ}
 	ghc $< -e 'compile "$@" main_loop'
+
+# Other Echo server
+
+rt/echod2: rt/echo2.o ${RUNTIME_OBJ}
+	${CC} ${CFLAGS} $^ -o $@ -laio -lpthread
+
+rt/echo2.o: rt/echo2.c ${HEADERS}
+rt/echo2.c: Echo2.hs ${HEMAN_OBJ}
+	ghc $< -e 'compile "$@" main_loop'
+
 
 # HTTP server
 

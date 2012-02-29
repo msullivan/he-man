@@ -28,10 +28,13 @@ int sock_bind_v4(int fd, int addr, int port);
 int print_int(int n);
 
 #define prepare_event(event, new_mode) (event->u.nb.mode = new_mode)
-#define read_msg_tag(msg) (msg->tag)
-#define read_msg_payload(msg) (msg->payload)
-#define buf_to_data(buf) ({msg_data_t data; data.p = buf; data})
+#define read_msg_tag(msg) (msg.tag)
+#define read_msg_payload(msg) (msg.payload)
+#define buf_to_data(buf) ({data_t data; data.p = buf; data;})
 #define data_to_buf(data) (data.p)
+#define int_to_data(n) ({data_t data; data.i = n; data;})
+#define data_to_int(data) (data.i)
+#define get_channel_event(ch) (&ch->ev)
 
 // This shouldn't be here. Programs should be able to include other headers
 int http_parse(char *buf, int len);

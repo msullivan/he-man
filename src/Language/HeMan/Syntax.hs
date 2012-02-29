@@ -310,6 +310,10 @@ callName name fn t args = var name t (E $ Call fn (toDExprList args))
 call :: ArgPacket a b => Prim -> Type c -> a -> Prog (Expr c)
 call fn t args = callName "tmp" fn t args
 
+callE :: ArgPacket a b => Prim -> Type c -> a -> (Expr c)
+callE fn t args = E $ Call fn (toDExprList args)
+
+
 -- Helper to construct a ThreadCode
 declare_thread :: (ArgPacket a c, ArgDecls b c) =>
                   b -> (a -> Prog ()) -> ThreadCode c

@@ -57,6 +57,14 @@ open :: BufferE -> IntE -> Prog FdE
 open path flags =
   call (CFn "open") FD (path, flags)
 
+dup :: FdE -> Prog FdE
+dup fd =
+  call (CFn "dup") FD (fd)
+
+memcpy :: BufferE -> BufferE -> IntE -> Prog ()
+memcpy dest src n = call' (CFn "memcpy") (dest, src, n)
+
+
 file_read :: FdE -> BufferE -> IntE -> Prog IntE
 file_read fd buf len =
   callName "amt_read" (CFn "read") Int (fd, buf, len)
@@ -88,23 +96,35 @@ new_channel =
 channel_send :: ChannelE -> IntE -> DataE -> Prog ()
 channel_send ch tag payload =
   call' (CFn "channel_send") (ch, tag, payload)
-channel_recv :: (ChannelE, EventE) -> Prog (IntE, Expr Data)
-channel_recv (ch, e) =
-  do wait e
+
+get_channel_event :: ChannelE -> EventE
+get_channel_event ev = callE (CFn "get_channel_event") Event ev
+
+channel_recv :: ChannelE -> Prog (IntE, Expr Data)
+channel_recv ch =
+  do wait (get_channel_event ch)
      msg <- call (CFn "channel_recv") Msg ch
      read_msg msg
+channel_recv_buf :: ChannelE -> Prog (IntE, BufferE)
+channel_recv_buf ch =
+  do (tag, d) <- channel_recv ch
+     return (tag, data_to_buf d)
 
-buf_to_data :: BufferE -> Prog DataE
-buf_to_data b = callName "buf" (CFn "buf_to_data") Data (b)
-data_to_buf :: DataE -> Prog BufferE
-data_to_buf d = callName "data" (CFn "data_to_buf") Buffer (d)
+buf_to_data :: BufferE -> DataE
+buf_to_data b = callE (CFn "buf_to_data") Data (b)
+data_to_buf :: DataE -> BufferE
+data_to_buf d = callE (CFn "data_to_buf") Buffer (d)
+int_to_data :: IntE -> DataE
+int_to_data i = callE (CFn "int_to_data") Data (i)
+data_to_int :: DataE -> IntE
+data_to_int d = callE (CFn "data_to_int") Int (d)
 
 
 -- For debugging
 print_int n  =
   call' (CFn "print_int") (n)
 
-errno = Constant "errno" -- weeeee
+errno = constant "errno" -- weeeee
 
 -- TODO: a bunch more
 
@@ -126,10 +146,12 @@ do_nb_action :: ExprFailable a =>
                 Prog (Expr a)
 do_nb_action t mode e action = do
   res <- var "result" t (E (NumLit (-1))) -- HACK! bad!
-  while (isFailure res) $ do
+  err <- var "err" Int kEAGAIN
+  while (isFailure res .&& err .== kEAGAIN) $ do
     prepare_event e mode
     wait e
     res .=. action
+    err .= errno
   return res
 
 accept (fd, e) = do_nb_action FD kEVENT_RD e (sock_accept fd)
@@ -145,7 +167,7 @@ full_write_naive ev buf size = do
   while (amt_written .< size .&& failed .== 0) $ do
     amt <- do_write ev (buf +* amt_written) (size - amt_written)
     amt_written .= amt_written + amt
-    ifE' (amt .== 0) $ do failed .= 1
+    ifE' (amt .== 0 .|| amt .== -1) $ do failed .= 1
   return amt_written
 
 -- This is "good" in the sense that by incorporating EAGAIN and short
@@ -157,7 +179,7 @@ full_write (fd, e) buf size = do
   while (amt_written .< size .&& failed .== 0) $ do
     prepare_event e kEVENT_WR
     amt <- sock_write fd (buf +* amt_written) (size - amt_written)
-    ifE (amt .== -1) (wait e) $
-      (ifE (amt .== 0) (failed .= 1)
+    ifE (amt .== -1 .&& errno .== kEAGAIN) (wait e) $
+      (ifE (amt .<= 0) (failed .= 1)
        (amt_written .= amt_written + amt))
   return amt_written

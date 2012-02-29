@@ -13,8 +13,10 @@ docs.pdf
 a.out
 test
 echo.c
+echo2.c
 http.c
 echod
+echod2
 httpd
 report.out
 proposal.out
