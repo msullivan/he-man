@@ -3,7 +3,7 @@ module Echo where
 import Language.HeMan
 
 q_limit = 1024
-port = 2023
+port = 2083
 bufsize = 4096
 
 setup_connection :: FdE -> Prog (FdE, EventE)
