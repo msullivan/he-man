@@ -12,7 +12,7 @@ extern int next_tid;
     struct thread_name *mk_ ## thread_name(void) { \
         struct thread_name *t = calloc(1, sizeof(struct thread_name)); \
         if (!t) fail(1, "allocating thread"); \
-        t->thread.tid = next_tid++; \
+        t->thread.tid = next_tid++;  /* XXX: concurrency hazard */ \
         return t; \
     }
 
