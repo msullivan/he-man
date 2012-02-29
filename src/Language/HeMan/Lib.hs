@@ -10,9 +10,9 @@ mk_nb_event fd modes =
 new_buf :: IntE -> Prog BufferE
 new_buf size =
   callName "buf" (CFn "new_buf") Buffer (curThread, size)
-prepare_event :: EventE -> IntE -> Prog IntE
+prepare_event :: EventE -> IntE -> Prog ()
 prepare_event fd modes =
-  call (CFn "prepare_event") Int (fd, modes)
+  call' (CFn "prepare_event") (fd, modes)
 
 -- Sugar for individual functions and whatnot
 socket :: IntE -> IntE -> IntE -> Prog FdE
@@ -22,8 +22,8 @@ socket domain typ protcol =
 set_sock_reuse :: FdE -> Prog IntE
 set_sock_reuse fd = call (CFn "set_sock_reuse") Int (fd)
 
-make_nb :: FdE -> Prog IntE
-make_nb fd = call (CFn "make_socket_non_blocking") Int (fd)
+make_nb :: FdE -> Prog ()
+make_nb fd = call' (CFn "make_socket_non_blocking") (fd)
 
 sock_bind_v4 :: FdE -> IntE -> IntE -> Prog IntE
 sock_bind_v4 fd addr port =
@@ -63,7 +63,7 @@ file_write fd buf len =
 
 -- For debugging
 print_int n  =
-  call (CFn "print_int") Int (n)
+  call' (CFn "print_int") (n)
 
 errno = Constant "errno" -- weeeee
 

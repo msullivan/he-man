@@ -290,6 +290,9 @@ ifE (E e) thenBody elseBody = do
 ifE' :: BoolE -> Prog a -> Prog ()
 ifE' e thenBody = ifE e thenBody (return ())
 
+call' :: ArgPacket a b => Prim -> a -> Prog ()
+call' fn args = add $ Exp (Call fn (toDExprList args))
+
 callName :: ArgPacket a b => String -> Prim -> Type c -> a -> Prog (Expr c)
 callName name fn t args = var name t (E $ Call fn (toDExprList args))
 
