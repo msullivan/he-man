@@ -25,7 +25,13 @@
 \begin{document}
 \maketitle
 
+% TODO: talk about type system, runtime improvements, optimizations
+
 \begin{abstract}
+% XXX: better abstract;
+% and where should we put the code link?
+% we should also move it to some better URL
+
 We present He-Man, a compiled, embedded, domain specific language in Haskell for
 building scalable network applications in a natural, straight-line manner while
 still producing efficient event loop-based code. He-Man programs are compact and
@@ -86,6 +92,7 @@ which links with an event loop runtime and any code a programmer might prefer to
 write directly in C. Our vision is that C programmers can use He-Man for their
 core application logic, and can write the rest of their application in C. 
 
+%% XXX: Should we put this at the end?
 \section{Related work}
 
 The C10K problem is particularly evident in the context of HTTP servers, which
@@ -381,6 +388,7 @@ a \t{main} function which spawns the first thread and jumps to the main loop.
   
 \subsection{Runtime}
 
+%% XXX: update
 The He-Man runtime is written in C and provides a state machine based
 thread scheduling model. In the view of the runtime, a thread consists
 of some bookkeeping state, some private state, and the next
@@ -400,6 +408,7 @@ system, after some number of invocations of the continuation
 (currently 50), the thread is paused and put on the back of the
 runqueue.
 
+% XXX: this has changed
 The He-Man runtime main loop is very simple, then: it loops
 indefinitely, and on each iteration it removes the thread at the head
 of the runqueue (if it exists) and runs it, and polls for I/O events.
@@ -424,6 +433,7 @@ event, the thread is added to the runqueue. If the the runqueue is
 empty, the call to \t{epoll} is blocking, otherwise it is called with a
 timeout of zero seconds, to simply poll for events.
 
+% XXX: this is not quite true; also who cares?
 The runtime also has support for Linux Kernel Asynchronous IO for file
 IO, using a Linux \t{eventfd} to allow \t{epoll} to wait on AIO
 events. This support is currently unused, since it was not actually
@@ -431,9 +441,9 @@ necessary to acheive acceptable performance for the web server.
 
 \section{Evaluation}\label{sec:evaluation}
 
-To evaluate He-Man, we built two network applications with He-Man and
-compared them to similar network applications built in C.
-We also discuss He-Man's memory overhead.
+To evaluate He-Man, we built several network applications with He-Man
+and compared them to similar network applications built in C.  We also
+discuss He-Man's memory overhead.
 
 \subsection{Echo Server}
 
@@ -529,6 +539,8 @@ under NPTL on Linux is 2 megabytes.
 
 % see how many threads we can spawn with Memory.hs
 
+
+%% XXX: needs serious work
 \section{Future work}
 
 We will continue our work on He-Man, and hope to submit it to a programming
