@@ -20,8 +20,6 @@
 #include "variable_queue.h"
 #include "mainloop.h"
 
-#define MT_RUNTIME 0
-
 #define MAX_EVENTS 10
 #define MAX_AIO_EVENTS 100 // dunno what this should be...
 #define MAX_ITERS 50
