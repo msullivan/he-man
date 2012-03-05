@@ -18,9 +18,8 @@
 
 \title{He-Man: A domain-specific language for lightweight concurrency}
 %\subtitle{I said hey, what's goin' on}
-\authorinfo{Carlo Angiuli}{}{cangiuli@cs.cmu.edu}
-\authorinfo{Michael Sullivan}{}{mjsulliv@andrew.cmu.edu}
-\date{December 12, 2011}
+\authorinfo{Carlo Angiuli}{Carnegie Mellon University}{cangiuli@cs.cmu.edu}
+\authorinfo{Michael Sullivan}{Carnegie Mellon University}{mjsulliv@cs.cmu.edu}
 
 \begin{document}
 \maketitle
@@ -37,7 +36,7 @@ building scalable network applications in a natural, straight-line manner while
 still producing efficient event loop-based code. He-Man programs are compact and
 measurements indicate that it performs acceptably. Our implementation is
 available at
-\url{https://github.com/msullivan/networks-project}.
+\url{https://github.com/msullivan/he-man}.
 \end{abstract}
 
 \section{Introduction}
@@ -140,7 +139,7 @@ time waiting on I/O. In particular, we would like to always yield to a
 client no longer blocked on I/O; we need not yield to blocked clients,
 nor do we (usually) need arbitrary interleaving of execution.
 
-%% XXX: do wereally want to talk about this?
+%% XXX: do we really want to talk about this?
 As of version 2.5.44, Linux has supported \t{epoll} for non-blocking
 multiplexing I/O. A server can register any number of file descriptors with
 \t{epoll\_ctl}, and a call to \t{epoll\_wait} returns the ready descriptors. 
@@ -165,7 +164,7 @@ are able to perform it automatically in the He-Man back-end.
 \section{Implementation}
 
 The latest version of He-Man can be found at
-\url{https://github.com/msullivan/networks-project}.
+\url{https://github.com/msullivan/he-man}.
 
 \subsection{Front-end}
 
