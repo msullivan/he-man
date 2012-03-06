@@ -22,7 +22,7 @@ setup_listener port = do
   e <- mk_nb_event fd kEVENT_RD
   return (fd, e)
 
-writer_code = declare_thread (("child_fd", FD), ("channel", Channel)) $
+writer_code = declare_thread (FD, Channel) $
   \(fd, ch) -> do
     ev <- setup_connection fd
     while 1 $ do
@@ -40,7 +40,7 @@ duplicate_buf buf sz =
      memcpy new_buf buf sz
      return new_buf
 
-child_code = declare_thread ("child_fd", FD) $
+child_code = declare_thread (FD) $
   \child_fd -> do
   ev <- setup_connection child_fd
   ch <- new_channel

@@ -106,59 +106,52 @@ unsafeExprCoerce (E x) = E x
 class ArgPacket a b | a -> b, b -> a where
   toIExprList :: a -> [IExpr]
   makeVars :: [String] -> a
-class ArgDecls a b | a -> b, b -> a where
-  toVDecl :: a -> [VDecl]
+  toITypeList :: b -> [IType]
 
 -- This is some ugly shit.
 -- Nullary and unary arg packets
 instance ArgPacket () () where
   toIExprList () = []
   makeVars [] = ()
-instance ArgPacket (Expr a) [a] where
-  toIExprList (E x) = [x]
+  toITypeList () = []
+instance ArgPacket (Expr a) (Type a) where
+  toIExprList (E e) = [e]
   makeVars [x] = E $ Var x
+  toITypeList t = [toIType t]
 
 -- Generic binary packets; this makes us need UndecidableInstances
-instance (ArgPacket b c) => ArgPacket (Expr a, b) (a, c) where
-  toIExprList (E x, xs) = x : toIExprList xs
+instance (ArgPacket b c) => ArgPacket (Expr a, b) (Type a, c) where
+  toIExprList (E e, es) = e : toIExprList es
   makeVars (x : xs) = (E $ Var x, makeVars xs)
+  toITypeList (t, ts) = toIType t : toITypeList ts
+
+{-
+instance ArgPacket (Expr a, Expr b) (Type a, Type b) where
+  toIExprList (E e1, E e2) = [e1, e2]
+  makeVars [x1, x2] = (E $ Var x1, E $ Var x2)
+  toITypeList (t1, t2) = [toIType t1, toIType t2]
+-}
 
 -- Hacky 3,4,5-ary packets
-instance ArgPacket (Expr a, Expr b, Expr c) (a, b, c) where
-  toIExprList (E x1, E x2, E x3) = [x1, x2, x3]
+instance ArgPacket (Expr a, Expr b, Expr c) (Type a, Type b, Type c) where
+  toIExprList (E e1, E e2, E e3) = [e1, e2, e3]
   makeVars [x1, x2, x3] = (E $ Var x1, E $ Var x2, E $ Var x3)
-instance ArgPacket (Expr a, Expr b, Expr c, Expr d) (a, b, c, d) where
-  toIExprList (E x1, E x2, E x3, E x4) = [x1, x2, x3, x4]
+  toITypeList (t1, t2, t3) = [toIType t1, toIType t2, toIType t3]
+instance ArgPacket
+         (Expr a, Expr b, Expr c, Expr d)
+         (Type a, Type b, Type c, Type d) where
+  toIExprList (E e1, E e2, E e3, E e4) = [e1, e2, e3, e4]
   makeVars [x1, x2, x3, x4] = (E $ Var x1, E $ Var x2, E $ Var x3, E $ Var x4)
-instance ArgPacket (Expr a, Expr b, Expr c, Expr d, Expr e)
-         (a, b, c, d, e) where
-  toIExprList (E x1, E x2, E x3, E x4, E x5) = [x1, x2, x3, x4, x5]
+  toITypeList (t1, t2, t3, t4) =
+    [toIType t1, toIType t2, toIType t3, toIType t4]
+instance ArgPacket
+         (Expr a, Expr b, Expr c, Expr d, Expr e)
+         (Type a, Type b, Type c, Type d, Type e) where
+  toIExprList (E e1, E e2, E e3, E e4, E e5) = [e1, e2, e3, e4, e5]
   makeVars [x1, x2, x3, x4, x5] = 
     (E $ Var x1, E $ Var x2, E $ Var x3, E $ Var x4, E $ Var x5)
-
--- Nullary and unary arg decls
-instance ArgDecls () () where
-  toVDecl () = []
-instance ArgDecls (TVDecl a) [a] where
-  toVDecl (x1, t1) = [(x1, toIType t1)]
-
--- Generic binary arg decls; this makes us need UndecidableInstances
-instance (ArgDecls b c) => ArgDecls (TVDecl a, b) (a, c) where
-  toVDecl ((x, t), xts) = (x, toIType t) : toVDecl xts
-
--- Hacky 3,4,5-ary arg decls
-instance ArgDecls (TVDecl a, TVDecl b, TVDecl c) (a, b, c) where
-  toVDecl ((x1, t1), (x2, t2), (x3, t3)) =
-    [(x1, toIType t1), (x2, toIType t2), (x3, toIType t3)]
-instance ArgDecls (TVDecl a, TVDecl b, TVDecl c, TVDecl d) (a, b, c, d) where
-  toVDecl ((x1, t1), (x2, t2), (x3, t3), (x4, t4)) =
-    [(x1, toIType t1), (x2, toIType t2), (x3, toIType t3), (x4, toIType t4)]
-instance ArgDecls (TVDecl a, TVDecl b, TVDecl c, TVDecl d, TVDecl e) 
-         (a, b, c, d, e) where
-  toVDecl ((x1, t1), (x2, t2), (x3, t3), (x4, t4), (x5, t5)) =
-    [(x1, toIType t1), (x2, toIType t2), (x3, toIType t3), (x4, toIType t4),
-     (x5, toIType t5)]
-
+  toITypeList (t1, t2, t3, t4, t5) =
+    [toIType t1, toIType t2, toIType t3, toIType t4, toIType t5]
 
 infixr 2 .||
 infixr 3 .&&
@@ -276,7 +269,7 @@ exit = add Exit
 wait :: EventE  -> Prog ()
 wait (E e) = add $ Wait e
 
-spawn :: ArgPacket a b => ThreadCode b -> a -> Prog ()
+spawn :: ArgPacket a b => ThreadCode a -> a -> Prog ()
 spawn (Thr thread) args = add $ Spawn thread (toIExprList args)
 
 extract :: Prog a -> Prog (a, [Stmt])
@@ -310,10 +303,10 @@ callE fn t args = E $ Call fn (toIExprList args)
 
 
 -- Helper to construct a ThreadCode
-declare_thread :: (ArgPacket a c, ArgDecls b c) =>
-                  b -> (a -> Prog ()) -> ThreadCode c
+declare_thread :: (ArgPacket a b) =>
+                  b -> (a -> Prog ()) -> ThreadCode a
 declare_thread decls f = Thr (decls', desugar prog)
   where prog = f (makeVars (map fst decls'))
-        decls' = toVDecl decls
-
+        arg_names = map (\n -> "arg_" ++ show n) [0..]
+        decls' = zip arg_names (toITypeList decls)
 --}}}
