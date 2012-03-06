@@ -410,21 +410,22 @@ runtime's state consists of the runqueue, which contains a list of all
 currently runnable threads.
 
 Continuation functions take a pointer to the thread information,
+perform some computation (such as making non-blocking I/O calls),
 update the continuation field in the thread data, and return whether
 the thread is still runnable; to block, a continuation function
 registers itself as blocking on an event and returns false; to exit,
-it frees the thread structure and returns false.
-Running a thread, then, consists of repeatedly invoking the thread's
-continuation function until it returns false. To prevent a
-thread that does not need to block from starving the rest of the
-system, after some number of invocations of the continuation
-(currently 50), the thread is paused and put on the back of the
-runqueue.
+it frees the thread structure and returns false.  Running a thread,
+then, consists of repeatedly invoking the thread's continuation
+function until it returns false. To prevent a thread that does not
+need to block from starving the rest of the system, after some number
+of invocations of the continuation (currently 50), the thread is
+paused and put on the back of the runqueue.
 
 % XXX: this has changed
-The He-Man runtime main loop is very simple, then: it loops
-indefinitely, and on each iteration it removes the thread at the head
-of the runqueue (if it exists) and runs it, and polls for I/O events.
+The He-Man runtime main loop is very simple, then: each worker thread
+loops indefinitely, and on each iteration it removes the thread at the
+head of the runqueue (if it exists) and runs it, and polls for I/O
+events.
 
 The runtime provides a blocking mechanism based on an event
 abstraction. To the runtime, an event consists of a pointer to a
@@ -434,6 +435,8 @@ nonblocking I/O, an event is allocated, marked with the associated file
 descriptor, and a new edge-triggered \t{epoll} event is created for the
 file descriptor using \t{epoll\_ctl}, with the event structure as the
 associated pointer data.
+
+% XXX: not true anymore
 We use edge-triggered instead of level-triggered so that we can wait
 on both read and write events for a given file descriptor without
 having to adjust which we are waiting for at runtime, and because
