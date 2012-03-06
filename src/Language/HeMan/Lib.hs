@@ -145,8 +145,7 @@ kO_RDONLY = constant "O_RDONLY"
 kEAGAIN = constant "EAGAIN"
 
 -- This implementation depends on level triggered semantics
-do_nb_action :: IntE -> Expr Event -> Prog IntE ->
-                Prog IntE
+do_nb_action :: IntE -> EventE -> Prog IntE -> Prog IntE
 do_nb_action mode e action = do
   res <- var "result" Int (-1)
   err <- var "err" Int kEAGAIN
@@ -157,12 +156,12 @@ do_nb_action mode e action = do
     err .= errno
   return res
 
-accept (fd, e) = mk_fd <$> do_nb_action kEVENT_RD e
-                           (sock_accept fd)
-do_read (fd, e) buf size = do_nb_action kEVENT_RD e
-                           (sock_read fd buf size)
-do_write (fd, e) buf size = do_nb_action kEVENT_WR e
-                            (sock_write fd buf size)
+accept (fd, e) =
+  mk_fd <$> do_nb_action kEVENT_RD e (sock_accept fd)
+do_read (fd, e) buf size =
+  do_nb_action kEVENT_RD e (sock_read fd buf size)
+do_write (fd, e) buf size =
+  do_nb_action kEVENT_WR e (sock_write fd buf size)
 
 -- TODO remove this
 full_write_naive ev buf size = do

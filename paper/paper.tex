@@ -279,21 +279,21 @@ child_code = declare_thread [("child_fd", Int)] $
 \begin{figure}[ht]
 \centering
 \begin{smallverbatim}
-do_nb_action :: Expr -> Prog Expr -> Prog Expr
-do_nb_action e action = do
-  res <- action
-  ifthen (res .< 0) $ do
-    while (res .< 0) $ do
-      wait e
-      res .=. action
+do_nb_action :: IntE -> EventE -> Prog IntE -> Prog IntE
+do_nb_action mode e action = do
+  res <- var "result" Int (-1)
+  while (res .< 0) $ do
+    set_nb_event_mode e mode
+    wait e
+    res .=. action
   return res
 
 accept (fd, e) =
-  do_nb_action e (sock_accept fd)
+  mk_fd <$> do_nb_action kEVENT_RD e (sock_accept fd)
 do_read (fd, e) buf size =
-  do_nb_action e (sock_read fd buf size)
+  do_nb_action kEVENT_RD e (sock_read fd buf size)
 do_write (fd, e) buf size =
-  do_nb_action e (sock_write fd buf size)
+  do_nb_action kEVENT_WR e (sock_write fd buf size)
 \end{smallverbatim}
 \caption{Implementation of ``blocking'' network calls.}
 \label{fig:generic}
