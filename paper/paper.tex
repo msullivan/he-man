@@ -289,7 +289,7 @@ functions invoke \b{Call} wrappers on the appropriate network calls.)
 \begin{figure}[ht]
 \centering
 \begin{code}
-child_code = declare_thread [("child_fd", Int)] $
+child_code = declare_thread (Int) $
   \[child_fd] -> do
   ev <- setup_connection child_fd
   buf <- new_buf bufsize
@@ -405,7 +405,28 @@ var = ...
 \label{fig:types}
 \end{figure}
 
-TODO: Talk about argument packets.
+Type checking foreign function calls and thread declaration and
+spawning is somewhat more interesting.
+% and maybe a bit novel? I dunno.
+For foreign function calls, our main concern was being able to write a
+single wrapper for call that handles a varying number of typed
+arguments. To this end, we created an \t{ArgPacket} type class that
+requires the ability to convert a packet into a list of \t{IExpr} and
+to construct an \t{ArgPacket} from a list of variable names. Instances
+of \t{ArgPacket} are provided for packets of $0$ to $5$ \t{Expr}
+arguments. Now we can parameterize a \t{Call} wrapper over an
+\t{ArgPacket} to provide a \t{Expr} based interface.
+
+For thread declarations, we can produce a similar \t{ArgDecl} class
+and associated instances that can convert a packet of \t{Type}s into a
+list of \t{IType}s.
+
+We want more than this, however: we want to ensure that both the code
+for a declared thread uses its arguments properly at the declared
+types code and that spawning threads provides arguments of the correct
+types. To do this, we need some way to extract all of the phantom
+types of the \t{Expr}s and \t{Type}s in \t{ArgPacket}s and
+\t{ArgDecl}s
 
 \begin{figure}[ht]
 \centering
@@ -414,7 +435,7 @@ class ArgPacket a b | a -> b, b -> a where
   toIExprList :: a -> [IExpr]
   makeVars :: [String] -> a
 class ArgDecls a b | a -> b, b -> a where
-  toVDecl :: a -> [VDecl]
+  toITypeList :: a -> [IType]
 
 instance ArgPacket (Expr a) [a] where
   toIExprList (E x) = [x]
@@ -424,11 +445,10 @@ instance ArgPacket (Expr a, Expr b) (a, b) where
   makeVars [x1, x2] = (E (Var x1), E (Var x2))
 -- ...
 
-instance ArgDecls (TVDecl a) [a] where
-  toVDecl (x1, t1) = [(x1, toIType t1)]
-instance ArgDecls (TVDecl a, TVDecl b) (a, b) where
-  toVDecl ((x1, t1), (x2, t2)) =
-    [(x1, toIType t1), (x2, toIType t2)]
+instance ArgDecls (Type a) [a] where
+  toITypeList t1 = [toIType t1]
+instance ArgDecls (Type a, Type b) (a, b) where
+  toITypeList (t1, t2) = [toIType t1, toIType t2]
 -- ...
 
 declare_thread :: (ArgPacket a c, ArgDecls b c) =>
