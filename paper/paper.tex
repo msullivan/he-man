@@ -44,6 +44,7 @@
 \def\pp#1{& & #1 \cr}
 \def\a#1{& $\mid$ & #1 \cr}
 
+%XXX: new title?
 \title{He-Man: A domain-specific language for lightweight concurrency}
 %\subtitle{I said hey, what's goin' on}
 \authorinfo{Carlo Angiuli}{Carnegie Mellon University}{cangiuli@cs.cmu.edu}
@@ -57,7 +58,6 @@
 \begin{abstract}
 % XXX: better abstract;
 % and where should we put the code link?
-% we should also move it to some better URL
 
 We present He-Man \cite{HeMan}, a compiled, embedded, domain specific language in Haskell for
 building scalable network applications in a natural, straight-line manner while
@@ -407,6 +407,46 @@ var = ...
 \end{figure}
 
 TODO: Talk about argument packets.
+
+\begin{figure}[ht]
+\centering
+\begin{code}
+class ArgPacket a b | a -> b, b -> a where
+  toIExprList :: a -> [IExpr]
+  makeVars :: [String] -> a
+class ArgDecls a b | a -> b, b -> a where
+  toVDecl :: a -> [VDecl]
+
+instance ArgPacket (Expr a) [a] where
+  toIExprList (E x) = [x]
+  makeVars [x] = E (Var x)
+instance ArgPacket (Expr a, Expr b) (a, b) where
+  toIExprList (E x1, E x2) = [x1, x2]
+  makeVars [x1, x2] = (E (Var x1), E (Var x2))
+-- ...
+
+instance ArgDecls (TVDecl a) [a] where
+  toVDecl (x1, t1) = [(x1, toIType t1)]
+instance ArgDecls (TVDecl a, TVDecl b) (a, b) where
+  toVDecl ((x1, t1), (x2, t2)) =
+    [(x1, toIType t1), (x2, toIType t2)]
+-- ...
+
+declare_thread :: (ArgPacket a c, ArgDecls b c) =>
+                  b -> (a -> Prog ()) ->
+                  ThreadCode c
+declare_thread = ...
+spawn :: ArgPacket a b => ThreadCode b -> a ->
+                          Prog ()
+spawn = ...
+call :: ArgPacket a b => Prim -> Type c -> a ->
+                         Prog (Expr c)
+call = ...
+
+\end{code}
+\caption{He-Man argument packets} % XXX
+\label{fig:arg-packets}
+\end{figure}
 
 \subsection{Back-end}
 
