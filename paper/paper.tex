@@ -310,8 +310,8 @@ do_write (fd, e) buf size =
 \p{(\i{label}, \i{thread\_label}, [\i{Stmt}], \i{Tail})}
 \i{Tail}
 \p{\b{Goto} \i{label}}
-\a{\b{GotoWait} \i{label}}
-\a{\b{If} \i{Expr} \i{Tail} \i{Tail}}
+\a{\b{GotoWait} \i{Expr} \i{label}}
+\a{\b{If} \i{Expr} ([\i{Stmt}], \i{Tail}) ([\i{Stmt}], \i{Tail})}
 \a{\b{Exit}}
 \i{Stmt}
 \p{\b{Decl} (\i{Var}, \i{Type}) \i{Expr}}
