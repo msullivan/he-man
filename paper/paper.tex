@@ -73,11 +73,11 @@ explicit per-client control blocks, a model which is very difficult for
 programmers to reason about. There exist numerous C/C++ libraries for event
 loops, but none of these avoid the state machine paradigm.
 
-Our observation is that the event loop model, in programming languages parlance,
-is essentially trampolining continuation-passing-style, which can be obtained by
-mechanical translation from the straight-line threaded code. This suggests it is
-possible to obtain the best of both worlds---a threaded programming model with
-the performance of event loops. 
+Our observation is that the event loop model is simply trampolining
+continuation-passing-style, % TODO citation
+which can be obtained by mechanical translation from the straight-line threaded
+code. This suggests it is possible to obtain the best of both worlds---a
+threaded programming model with the performance of event loops. 
 
 To that end, we present He-Man: Haskell Event Manager, Apropos Networking, an
 embedded domain-specific language (EDSL) hosted in Haskell, which provides a
@@ -558,11 +558,6 @@ under NPTL on Linux is 2 megabytes.
 %% XXX: needs serious work
 \section{Future work}
 
-We will continue our work on He-Man, and hope to submit it to a programming
-languages conference such as ICFP. Most importantly, we plan to rework our
-front-end so as to reject badly-typed programs; currently, we do not ensure
-that, e.g., we do not take the sum of two file handles.
-
 We also plan to expand the language with the ability to declare functions and
 make non-external function calls within a thread. This will make code simpler
 and shorter by allowing the programmer to abstract away common functionality
@@ -574,13 +569,6 @@ replace our \t{malloc} calls with calls to a custom slab allocator. We also plan
 on writing a multithreaded runtime, to allow servicing multiple threads' ready
 events simultaneously. Because our threads don't interact, this does not require
 exposing any locking to the programmer.
-
-The backend can perform more aggressive optimization on the code blocks. In
-particular, we currently do not allow any control flow except at tail position;
-if both branches of an \t{if} are non-blocking, we should avoid translating it
-into multiple blocks, requiring a yield to the main loop. It should also be
-possible to gather interesting output from the backend, like a graphical
-representation of the generated state machine, for documentation purposes.
 
 We also hope to implement observable sharing, as in \cite{Gill}, to allow the
 same thread to have distinct spawn sites without code duplication. This does not
