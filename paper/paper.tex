@@ -401,7 +401,6 @@ a \t{main} function which spawns the first thread and jumps to the main loop.
   
 \subsection{Runtime}
 
-%% XXX: update
 The He-Man runtime is written in C and provides a state machine based
 thread scheduling model. In the view of the runtime, a thread consists
 of some bookkeeping state, some private state, and the next
@@ -421,39 +420,37 @@ need to block from starving the rest of the system, after some number
 of invocations of the continuation (currently 50), the thread is
 paused and put on the back of the runqueue.
 
-% XXX: this has changed
 The He-Man runtime main loop is very simple, then: each worker thread
 loops indefinitely, and on each iteration it removes the thread at the
 head of the runqueue (if it exists) and runs it, and polls for I/O
-events.
+events. A global runqueue is shared between threads; a more clever
+runtime could have per-worker-thread runqueues and do some sort of
+work stealing.
 
 The runtime provides a blocking mechanism based on an event
-abstraction. To the runtime, an event consists of a pointer to a
-thread that is blocked on it and some arbitrary identifier (in
-practice, the file descriptor). To create an event for use with
-nonblocking I/O, an event is allocated, marked with the associated file
-descriptor, and a new edge-triggered \t{epoll} event is created for the
-file descriptor using \t{epoll\_ctl}, with the event structure as the
-associated pointer data.
+abstraction. To the runtime, an event consists of a type tag, a
+pointer to a thread that is blocked on it and some event type specific
+data (such as a file descriptor or a pointer to an associated
+channel). Events are level-triggered: blocking on an event will return
+whenever the event ``is ready'', as opposed to when the event
+``becomes ready'' as in edge-triggered (using edge-triggered semantics
+causes extra difficulties in an environment with multiple threads
+processing events).
 
-% XXX: not true anymore
-We use edge-triggered instead of level-triggered so that we can wait
-on both read and write events for a given file descriptor without
-having to adjust which we are waiting for at runtime, and because
-He-Man's programming model makes it easy to meet the requirement that
-blocking on a file descriptor is only done after an operation on the
-descriptor has returned \t{EAGAIN}.
-The actual polling for I/O events is done by calling \t{epoll}. For each
-event that has been returned by \t{epoll}, if a thread is waiting on the
-event, the thread is added to the runqueue. If the the runqueue is
-empty, the call to \t{epoll} is blocking, otherwise it is called with a
-timeout of zero seconds, to simply poll for events.
-
-% XXX: this is not quite true; also who cares?
-The runtime also has support for Linux Kernel Asynchronous IO for file
+Currently, the He-Man runtime provides support for two types of
+events: socket/pipe file I/O and asynchronous He-Man channels.  The
+runtime has partial support for Linux Kernel Asynchronous IO for file
 IO, using a Linux \t{eventfd} to allow \t{epoll} to wait on AIO
-events. This support is currently unused, since it was not actually
-necessary to acheive acceptable performance for the web server.
+events. Adding new types of events that an application requires would
+be simple, but require some runtime hacking.
+
+The actual polling for I/O events is done by calling \t{epoll}
+(although it would not be difficult to adapt it to use BSD's
+\t{kqueue} or the more standard \t{poll} or \t{select}).  For each
+event that has been returned by \t{epoll}, if a thread is waiting on
+the event, the thread is added to the runqueue. If the the runqueue is
+empty, the call to \t{epoll} blocks, otherwise it is called with a
+timeout of zero seconds, to simply poll for events.
 
 \section{Evaluation}\label{sec:evaluation}
 
@@ -466,21 +463,24 @@ discuss He-Man's memory overhead.
 To compare the ease of writing event based network applications, we
 built simple echo servers using both He-Man and C. The C version was
 written in as an event loop driven explicit state machine using the
-He-Man runtime. The C version, which is fairly tightly written, is 98
-lines of source, according to SLOCCount. It is fairly readable, but
-its structure is obscured by being split into states and the need to
-explicitly handle read and write returning \t{EAGAIN} and write returning
-short. The state machine has a total of five states. The He-Man
-version is 33 lines long and is a very clear representation of the
-control flow of each individual thread. (Additionally, the He-Man
-library has 17 lines of code implementing generic routines for
-simulating blocking IO using nonblocking IO and wait.) The total line
-counts, however, somewhat understate the difference between the
-versions, since the boilerplate for setting up connections is about
-the same for both versions. When just looking at the core read/write
-loop, the difference is much more apparent: the C version is 38 lines
-of code, and the He-Man version is 5.
+He-Man runtime. The C version, which is fairly tightly written and
+which uses the He-Man runtime in its capacity as a somewhat generic
+event based IO framework, is 98 lines of source, according to
+SLOCCount. It is fairly readable, but its structure is obscured by
+being split into states and the need to explicitly handle read and
+write returning \t{EAGAIN} and write returning short. The state
+machine has a total of five states. The He-Man version is 33 lines
+long and is a very clear representation of the control flow of each
+individual thread. (Additionally, the He-Man library has 17 lines of
+code implementing generic routines for simulating blocking IO using
+nonblocking IO and wait.) The total line counts, however, somewhat
+understate the difference between the versions, since the boilerplate
+for setting up connections is about the same for both versions. When
+just looking at the core read/write loop, the difference is much more
+apparent: the C version is 38 lines of code, and the He-Man version is
+5.
 
+% XXX: update
 The generated code is substantially less tight than the C version,
 although it is unlikely to be any slower in practice. It has 15 states
 and is 319 lines of C. This could be reduced substantially by allowing
