@@ -324,63 +324,71 @@ do_write (fd, e) buf size =
 \end{figure}
 
 The next several passes convert our front-end grammar to a back-end grammar,
-shown in Figure \ref{fig:back-syntax}, which closely resembles the features of
-the C code that we subsequently generate. Most significantly, a program now
-consists of a list of \i{Block}s of code, each of which belongs to a \i{Thread},
-and a list of \i{Thread}s. \i{Expr}s remain unchanged from the front-end, while
-all control flow is delegated to the \i{Tail} position of a \i{Block} of code. 
+shown in Figure \ref{fig:back-syntax}, which closely resembles the C code we
+ultimately generate. In particular, a back-end program is a list of code
+\i{Block}s, each belonging to one of a list of \i{Thread}s. \i{Expr}s remain
+unchanged from the front-end, but critically, control flow is relegated to
+\i{Tail} position in each block.
 
-As the grammar makes clear, the most important task for our back-end is to
-convert our linear front-end code into a collection of states appropriate for an
-event loop. This occurs in our \t{flattenPrgm} pass, which passes through the
-program in reverse order with a \t{RWS} monad, converting it to uniquely-named
-blocks whose only control-flow consists of tail-position jumps to other block
-labels. Here, the \t{State} maintains the next block number, the \t{Writer}
-collects lists of \i{Block}s and \i{Thread}s, and the \t{Reader} maintains the
-current thread number (defined as the first block in the current thread).
+Our back-end's main task is to convert our linear front-end code into a state
+machine of code blocks. This occurs in our \t{flattenPrgm} pass, which passes
+through program \i{Stmt}s in reverse order, generating uniquely-named blocks
+whose only control-flow consists of (non-nested) tail-position jumps to other
+blocks. Threads are identified with their first block.
+% TODO discuss the transformations
 
-As an illustrative example, consider encountering an \b{If} statement in our
-backwards pass, where we have access to the translation of the later statements,
-as well as the earlier statements. Morally, we would like to translate this to a
-conditional jump to the translation of either the first or second arm, each of
-which is terminated by a jump to the later statements. (Note that
-\t{flattenPrgm} leaves all optimization to the next pass.)
+%As an illustrative example, consider encountering an \b{If} statement in our
+%backwards pass, where we have access to the translation of the later
+%statements, as well as the earlier statements. Morally, we would like to
+%translate this to a conditional jump to the translation of either the first or
+%second arm, each of which is terminated by a jump to the later statements.
+%(Note that \t{flattenPrgm} leaves all optimization to the next pass.)
 
-We package up the later statements in a new block, and then translate the
-preceding statements, terminated by a tail-position conditional \b{If}. We also
-translate each arm of the original \b{If}, terminated by a tail-position
-\b{Goto} to the block containing the later statements. Importantly, all three of
-these recursive translations may generate new blocks, which will be collected
-automatically by the \t{Writer} monad.
+%We package up the later statements in a new block, and then translate the
+%preceding statements, terminated by a tail-position conditional \b{If}. We also
+%translate each arm of the original \b{If}, terminated by a tail-position
+%\b{Goto} to the block containing the later statements. Importantly, all three
+%of these recursive translations may generate new blocks, which will be
+%collected automatically by the \t{Writer} monad.
 
-Because blocking I/O may only happen in the main loop, we also terminate a block
-after any blocking I/O call, by inserting a \b{GotoWait} to the block containing
-the later statements. \b{GotoWait} is identical to \b{Goto} except to signal to
-later passes that the thread \emph{must} yield to the main loop at this
-location, and thus the goto must not be optimized away.
+%Because blocking I/O may only happen in the main loop, we also terminate a
+%block after any blocking I/O call, by inserting a \b{GotoWait} to the block
+%containing the later statements. \b{GotoWait} is identical to \b{Goto} except
+%to signal to later passes that the thread \emph{must} yield to the main loop at
+%this location, and thus the goto must not be optimized away.
+% TODO for concurrency-related reasons
 
-This pass generates a correct state machine, albeit one which contains many
-blocks with only tail-position jumps. We follow it up with the \t{optimizeJumps}
-pass, which removes these empty blocks, redirecting all \b{Goto}s to their
-ultimate destinations, and allowing nested \b{If}s in tail position. Nested
-\b{If}s occur frequently in generated code, for example, immediately before an
-\t{if} statement at the end of a \t{while} loop, when the code might next jump
-inside the \t{if} statement, to the top of the \t{while} loop, or after the
-\t{while} loop, depending on multiple tests. Although this pass is, strictly
-speaking, an optimization, it is critical for obtaining high-quality output.
+This pass generates a correct, albeit unnecessarily large, state machine with
+many empty blocks. Over the next few passes, our goal is to shrink this state
+machine as much as possible, because yielding to the main loop is the only
+overhead in the He-Man system. Although these passes are, strictly speaking,
+optimizations, they are very important for performance.
 
-At this point, the program's control flow is correct, but many blocks will
-contain uses of variables which have been declared in previous blocks. The
-\t{collectFrees} pass traverses each block, collecting the variables used but
-not declared in each block. (Our front-end ensures that a variable is only ever
-declared in one location, so there is no ambiguity.) The local variables of each
-thread are the union of the used-not-declared variables in each of its blocks.
-We save this list of local variables in the appropriate \i{Thread} container.
+Our \t{simplifyJumps} pass traverses the program collecting empty blocks,
+redirecting control flow to its ultimate destination. In particular, we often
+introduce nested \b{If}s in tail-position, for example, before an \t{if}
+statement at the end of a \t{while} loop, where control resumes in one of three
+blocks.
 
-Note that we could simply mark all declared variables as thread-local, but
-variables which are only used in same block as their declaration need not be
-retained outside that block. We want to minimize the number of thread-local
-variables, because this directly impacts the memory overhead of each thread.
+At this point, we need to eliminate spurious control flow edges from our state
+machine in order to enable further block elimination. To do this, we perform
+block-local constant propagation and folding, and dead code elimination. At face
+value, it is not important for us to optimize straight-line code: our output is
+further optimized by a C compiler, and execution time is dominated by I/O, not
+computation. However, simple constant folding eliminates many \t{if} statements
+%TODO examples, justification
+
+Once our 
+% TODO fuseBlocks pass
+
+At this point, many blocks refer to variables declared in other blocks. The
+\t{collectFrees} pass traverses each block, collecting the variables each thread
+must close over. Because our front-end ensures each variable declaration is
+unique, we need not consider control flow; the set of thread-local variables is
+merely the union of the used-not-declared variables in each of its blocks.  We
+save this list of local variables in the appropriate \i{Thread} container. (Of
+course, it would be adequate to mark all variables thread-local, but this would
+negatively impact our per-thread memory overhead.)
 
 From this point, the path to C code is fairly straightforward. Concretely, we
 transform our back-end grammar to the AST provided by the Language.C package,
