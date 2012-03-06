@@ -3,6 +3,34 @@
 {hyperref}
 \usepackage{graphicx}
 \usepackage{verbatim}
+
+\usepackage{listings}
+\lstset{
+  language=Haskell,
+  basicstyle=\small\ttfamily,
+  frame=trbl,
+  basewidth={0.5em,0.45em},
+%  commentstyle=\ttfamily\color{ForestGreen},
+  literate=*{+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+            {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+            {\\\\}{{\char`\\\char`\\}}1
+            {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+            {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2
+            %{\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
+            {>>}{{>>}}2 {>>=}{{>>=}}2
+            {|}{{$\mid$}}1
+}
+
+\lstnewenvironment{egcode}
+  {\lstset{frame=TRBL}}
+  {\lstset{frame=trbl}}
+
+\lstnewenvironment{code}
+  {\lstset{frame=}}
+  {}
+
+
+
 \newenvironment{smallverbatim}{\endgraf\small\verbatim}{\endverbatim} 
 \renewcommand{\t}{\texttt}
 \renewcommand{\b}{\textbf}
@@ -260,7 +288,7 @@ functions invoke \b{Call} wrappers on the appropriate network calls.)
 
 \begin{figure}[ht]
 \centering
-\begin{smallverbatim}
+\begin{code}
 child_code = declare_thread [("child_fd", Int)] $
   \[child_fd] -> do
   ev <- setup_connection child_fd
@@ -270,14 +298,14 @@ child_code = declare_thread [("child_fd", Int)] $
     ifthen (amt_read .== 0) exit
     amt_written <- full_write ev buf amt_read
     ifthen (amt_written .< amt_read) exit
-\end{smallverbatim}
+\end{code}
 \caption{He-Man example from echo server.}
 \label{fig:code-ex}
 \end{figure}
 
 \begin{figure}[ht]
 \centering
-\begin{smallverbatim}
+\begin{code}
 do_nb_action :: IntE -> EventE -> Prog IntE
                 -> Prog IntE
 do_nb_action mode e action = do
@@ -294,7 +322,7 @@ do_read (fd, e) buf size =
   do_nb_action kEVENT_RD e (sock_read fd buf size)
 do_write (fd, e) buf size =
   do_nb_action kEVENT_WR e (sock_write fd buf size)
-\end{smallverbatim}
+\end{code}
 \caption{Implementation of ``blocking'' network calls.}
 \label{fig:generic}
 \end{figure}

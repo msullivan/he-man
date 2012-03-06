@@ -93,7 +93,7 @@ type EventE = Expr Event
 type ChannelE = Expr Channel
 type DataE = Expr Data
 
--- Lift functions of IExprs to ones over Exprs
+-- Lift functions over IExprs to ones over Exprs
 typ1 :: (IExpr -> IExpr) -> (Expr a -> Expr b)
 typ1 f (E e1) = E (f e1)
 typ2 :: (IExpr -> IExpr -> IExpr) -> (Expr a -> Expr b -> Expr c)
