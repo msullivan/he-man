@@ -169,14 +169,14 @@ The latest version of He-Man can be found at
 \subsection{Front-end}
 
 The underlying abstract syntax for the front-end He-Man language is a
-fairly conventional imperative, statement-based, first-order language,
-shown in Figure \ref{fig:front-syntax}. The notable constructs are
-\b{Spawn}, creating a new thread, which takes a list of arguments
-and launches the associated code with those arguments available to it,
-and \b{Wait}, which takes an event expression as an argument and
-blocks until the event has ``completed''. Note that \b{Call} is for
-calling foreign functions; He-Man does not have its own notion of
-function.
+fairly conventional imperative, block-structured, statement-based,
+first-order language, shown in Figure \ref{fig:front-syntax}. The
+notable constructs are \b{Spawn}, creating a new thread, which takes a
+list of arguments and launches the associated code with those
+arguments available to it, and \b{Wait}, which takes an event
+expression as an argument and blocks until the event is
+``ready''. Note that \b{Call} is for calling foreign functions; He-Man
+does not have its own notion of function.
 
 Since writing programs using the abstract syntax would be highly
 inconvenient, we provide a monadic library for writing He-Man
@@ -233,23 +233,23 @@ functions invoke \b{Call} wrappers on the appropriate network calls.)
 \centering
 \bnf{
 \i{Stmt}
-\p{\b{Decl} (\i{Var}, \i{Type}) \i{DExpr}}
-\a{\b{While} \i{DExpr} [\i{Stmt}]}
-\a{\b{If} \i{DExpr} [\i{Stmt}] [\i{Stmt}]}
-\a{\b{Spawn} ([(\i{Var}, \i{Type})], [\i{Stmt}]) [\i{DExpr}]}
-\a{\b{Assign} \i{DExpr} \i{DExpr}}
-\a{\b{Exp} \i{DExpr}}
-\a{\b{Wait} \i{DExpr}}
+\p{\b{Decl} (\i{Var}, \i{Type}) \i{Expr}}
+\a{\b{While} \i{Expr} [\i{Stmt}]}
+\a{\b{If} \i{Expr} [\i{Stmt}] [\i{Stmt}]}
+\a{\b{Spawn} ([(\i{Var}, \i{Type})], [\i{Stmt}]) [\i{Expr}]}
+\a{\b{Assign} \i{Expr} \i{Expr}}
+\a{\b{Exp} \i{Expr}}
+\a{\b{Wait} \i{Expr}}
 \a{\b{Exit}}
-\i{DExpr}
-\p{\b{Call} \i{String} [\i{DExpr}]}
-\a{\b{Arith} \i{ArithOp} \i{DExpr} \i{DExpr}}
-\a{\b{ArithUnop} \i{ArithUnop} \i{DExpr}}
-\a{\b{RelnOp} \i{RelnOp} \i{DExpr} \i{DExpr}}
+\i{Expr}
+\p{\b{Call} \i{String} [\i{Expr}]}
+\a{\b{Arith} \i{ArithOp} \i{Expr} \i{Expr}}
+\a{\b{ArithUnop} \i{ArithUnop} \i{Expr}}
+\a{\b{RelnOp} \i{RelnOp} \i{Expr} \i{Expr}}
 \a{\b{Constant} \i{String}}
 \a{\b{NumLit} \i{Integer}}
 \a{\b{StringLit} \i{String}}
-\a{\b{Var} \i{var}}
+\a{\b{Var} \i{Var}}
 \i{Type} 
 \p{\b{Int} $\mid$ \b{Bool} $\mid$ \b{FD}
    $\mid$ \b{Buffer} $\mid$ \b{Event} $\mid$ $\cdots$}
@@ -278,7 +278,8 @@ child_code = declare_thread [("child_fd", Int)] $
 \begin{figure}[ht]
 \centering
 \begin{smallverbatim}
-do_nb_action :: IntE -> EventE -> Prog IntE -> Prog IntE
+do_nb_action :: IntE -> EventE -> Prog IntE
+                -> Prog IntE
 do_nb_action mode e action = do
   res <- var "result" Int (-1)
   while (res .< 0) $ do
@@ -565,10 +566,7 @@ like read and write loops.
 
 In the runtime, our current thread \t{struct}s are larger than necessary.
 Because the runtime allocates a \t{struct} on every thread spawn, we should
-replace our \t{malloc} calls with calls to a custom slab allocator. We also plan
-on writing a multithreaded runtime, to allow servicing multiple threads' ready
-events simultaneously. Because our threads don't interact, this does not require
-exposing any locking to the programmer.
+replace our \t{malloc} calls with calls to a custom slab allocator.
 
 We also hope to implement observable sharing, as in \cite{Gill}, to allow the
 same thread to have distinct spawn sites without code duplication. This does not
