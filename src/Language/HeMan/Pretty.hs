@@ -48,7 +48,7 @@ instance PP Lang.Stmt where
     Lang.Wait expr -> text "wait" <> parens (pretty expr)
     Lang.Exit -> text "exit"
 
-instance PP Lang.DExpr where
+instance PP Lang.IExpr where
   pretty e = case e of
     Lang.Call (Lang.CFn prim) exprs ->
       text prim <> (parens $ commaSeparated (map pretty exprs))

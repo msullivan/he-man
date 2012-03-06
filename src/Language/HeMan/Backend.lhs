@@ -8,7 +8,7 @@ module Language.HeMan.Backend
   (Stmt(..), Tail(..), Block, Thread, backend, printCFG) where
 
 import qualified Language.HeMan.Syntax as Front
-  (Stmt(..), DExpr(..), VDecl, Prim(..),
+  (Stmt(..), IExpr(..), VDecl, Prim(..),
    ArithOp(..), ArithUnop(..), RelnOp(..), Block, Var)
 import Control.Monad.RWS
 import Control.Monad.Writer
@@ -32,15 +32,15 @@ type ThreadName = Label
 type Block = (Label, ThreadName, [Stmt], Tail)
 type Thread = (ThreadName, [Front.VDecl])
 
-data Stmt = Decl Front.VDecl Front.DExpr
-          | Assign Front.DExpr Front.DExpr
-          | Exp Front.DExpr
-          | Spawn Label [(Front.VDecl, Front.DExpr)]
+data Stmt = Decl Front.VDecl Front.IExpr
+          | Assign Front.IExpr Front.IExpr
+          | Exp Front.IExpr
+          | Spawn Label [(Front.VDecl, Front.IExpr)]
           deriving (Eq, Ord, Show)
 
-data Tail = If Front.DExpr ([Stmt],Tail) ([Stmt],Tail)
+data Tail = If Front.IExpr ([Stmt],Tail) ([Stmt],Tail)
           | Goto Label
-          | GotoWait Front.DExpr Label
+          | GotoWait Front.IExpr Label
           | Exit
           deriving (Eq, Ord, Show)
 \end{code}
@@ -229,7 +229,7 @@ and performing constant folding where appropriate.
 \begin{code}
 optimize bs = map (\b -> evalState (optimizeBlock b) []) bs
 
-type Optimizer = State [(Front.Var,Front.DExpr)]
+type Optimizer = State [(Front.Var,Front.IExpr)]
 
 optimizeBlock (l,t,ss,tail) = do
   ss' <- mapM optimizeStmt ss

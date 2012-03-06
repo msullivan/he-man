@@ -1,7 +1,7 @@
 module Language.HeMan.Codegen (codegen) where
 
 import Language.HeMan.Syntax
-  (Prim(..), ArithOp(..), ArithUnop(..), RelnOp(..), IType(..), DExpr(..))
+  (Prim(..), ArithOp(..), ArithUnop(..), RelnOp(..), IType(..), IExpr(..))
 import Language.HeMan.Backend
   (Block, Thread, Stmt(..), Tail(..))
 import Language.HeMan.CLib

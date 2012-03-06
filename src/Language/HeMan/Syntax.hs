@@ -23,23 +23,23 @@ data Data
 data Msg
 data Channel
 
-data Stmt = Decl VDecl DExpr
-          | While DExpr Block
-          | If DExpr Block Block
-          | Spawn IThreadCode [DExpr]
-          | Assign DExpr DExpr
-          | Exp DExpr
-          | Wait DExpr
+data Stmt = Decl VDecl IExpr
+          | While IExpr Block
+          | If IExpr Block Block
+          | Spawn IThreadCode [IExpr]
+          | Assign IExpr IExpr
+          | Exp IExpr
+          | Wait IExpr
           | Exit
           deriving (Eq, Ord, Show)
 
 data IType = IInt | IBool | IFD | IBuffer | IEvent | IData | IMsg | IChannel
           deriving (Eq, Ord, Show)
 
-data DExpr = Call Prim [DExpr]
-          | Arith ArithOp DExpr DExpr
-          | ArithUnop ArithUnop DExpr
-          | RelnOp RelnOp DExpr DExpr
+data IExpr = Call Prim [IExpr]
+          | Arith ArithOp IExpr IExpr
+          | ArithUnop ArithUnop IExpr
+          | RelnOp RelnOp IExpr IExpr
           | Constant String
           | NumLit Integer
           | StringLit String
@@ -82,7 +82,7 @@ mkIType Data = IData
 mkIType Msg = IMsg
 mkIType Channel = IChannel
 
-newtype Expr a = E DExpr
+newtype Expr a = E IExpr
                deriving (Eq, Ord, Show)
 
 type IntE = Expr Int
@@ -93,10 +93,10 @@ type EventE = Expr Event
 type ChannelE = Expr Channel
 type DataE = Expr Data
 
--- Lift functions of DExprs to ones over Exprs
-typ1 :: (DExpr -> DExpr) -> (Expr a -> Expr b)
+-- Lift functions of IExprs to ones over Exprs
+typ1 :: (IExpr -> IExpr) -> (Expr a -> Expr b)
 typ1 f (E e1) = E (f e1)
-typ2 :: (DExpr -> DExpr -> DExpr) -> (Expr a -> Expr b -> Expr c)
+typ2 :: (IExpr -> IExpr -> IExpr) -> (Expr a -> Expr b -> Expr c)
 typ2 f (E e1) (E e2) = E (f e1 e2)
 
 unsafeExprCoerce :: Expr a -> Expr b
@@ -104,7 +104,7 @@ unsafeExprCoerce (E x) = E x
 
 -- TODO: Document this trick.
 class ArgPacket a b | a -> b, b -> a where
-  toDExprList :: a -> [DExpr]
+  toIExprList :: a -> [IExpr]
   makeVars :: [String] -> a
 class ArgDecls a b | a -> b, b -> a where
   toVDecl :: a -> [VDecl]
@@ -117,27 +117,27 @@ data OneArg a
 -- This is some ugly shit.
 -- Nullary and unary arg packets
 instance ArgPacket () () where
-  toDExprList () = []
+  toIExprList () = []
   makeVars [] = ()
 instance ArgPacket (Expr a) (OneArg a) where
-  toDExprList (E x) = [x]
+  toIExprList (E x) = [x]
   makeVars [x] = E $ Var x
 
 -- Generic binary packets; this makes us need UndecidableInstances
 instance (ArgPacket b c) => ArgPacket (Expr a, b) (a, c) where
-  toDExprList (E x, xs) = x : toDExprList xs
+  toIExprList (E x, xs) = x : toIExprList xs
   makeVars (x : xs) = (E $ Var x, makeVars xs)
 
 -- Hacky 3,4,5-ary packets
 instance ArgPacket (Expr a, Expr b, Expr c) (a, b, c) where
-  toDExprList (E x1, E x2, E x3) = [x1, x2, x3]
+  toIExprList (E x1, E x2, E x3) = [x1, x2, x3]
   makeVars [x1, x2, x3] = (E $ Var x1, E $ Var x2, E $ Var x3)
 instance ArgPacket (Expr a, Expr b, Expr c, Expr d) (a, b, c, d) where
-  toDExprList (E x1, E x2, E x3, E x4) = [x1, x2, x3, x4]
+  toIExprList (E x1, E x2, E x3, E x4) = [x1, x2, x3, x4]
   makeVars [x1, x2, x3, x4] = (E $ Var x1, E $ Var x2, E $ Var x3, E $ Var x4)
 instance ArgPacket (Expr a, Expr b, Expr c, Expr d, Expr e)
          (a, b, c, d, e) where
-  toDExprList (E x1, E x2, E x3, E x4, E x5) = [x1, x2, x3, x4, x5]
+  toIExprList (E x1, E x2, E x3, E x4, E x5) = [x1, x2, x3, x4, x5]
   makeVars [x1, x2, x3, x4, x5] = 
     (E $ Var x1, E $ Var x2, E $ Var x3, E $ Var x4, E $ Var x5)
 
@@ -282,7 +282,7 @@ wait :: EventE  -> Prog ()
 wait (E e) = add $ Wait e
 
 spawn :: ArgPacket a b => ThreadCode b -> a -> Prog ()
-spawn (Thr thread) args = add $ Spawn thread (toDExprList args)
+spawn (Thr thread) args = add $ Spawn thread (toIExprList args)
 
 extract :: Prog a -> Prog (a, [Stmt])
 extract m = censor (const []) (listen m)
@@ -302,16 +302,16 @@ ifE' :: BoolE -> Prog a -> Prog ()
 ifE' e thenBody = ifE e thenBody (return ())
 
 call' :: ArgPacket a b => Prim -> a -> Prog ()
-call' fn args = add $ Exp (Call fn (toDExprList args))
+call' fn args = add $ Exp (Call fn (toIExprList args))
 
 callName :: ArgPacket a b => String -> Prim -> Type c -> a -> Prog (Expr c)
-callName name fn t args = var name t (E $ Call fn (toDExprList args))
+callName name fn t args = var name t (E $ Call fn (toIExprList args))
 
 call :: ArgPacket a b => Prim -> Type c -> a -> Prog (Expr c)
 call fn t args = callName "tmp" fn t args
 
 callE :: ArgPacket a b => Prim -> Type c -> a -> (Expr c)
-callE fn t args = E $ Call fn (toDExprList args)
+callE fn t args = E $ Call fn (toIExprList args)
 
 
 -- Helper to construct a ThreadCode
