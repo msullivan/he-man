@@ -72,15 +72,15 @@ data Type a where
   Msg :: Type Msg
   Channel :: Type Channel
 
-mkIType :: Type a -> IType
-mkIType Int = IInt
-mkIType Bool = IBool
-mkIType FD = IFD
-mkIType Buffer = IBuffer
-mkIType Event = IEvent
-mkIType Data = IData
-mkIType Msg = IMsg
-mkIType Channel = IChannel
+toIType :: Type a -> IType
+toIType Int = IInt
+toIType Bool = IBool
+toIType FD = IFD
+toIType Buffer = IBuffer
+toIType Event = IEvent
+toIType Data = IData
+toIType Msg = IMsg
+toIType Channel = IChannel
 
 newtype Expr a = E IExpr
                deriving (Eq, Ord, Show)
@@ -93,7 +93,7 @@ type EventE = Expr Event
 type ChannelE = Expr Channel
 type DataE = Expr Data
 
--- Lift functions of IExprs to ones over Exprs
+-- Lift functions over IExprs to ones over Exprs
 typ1 :: (IExpr -> IExpr) -> (Expr a -> Expr b)
 typ1 f (E e1) = E (f e1)
 typ2 :: (IExpr -> IExpr -> IExpr) -> (Expr a -> Expr b -> Expr c)
@@ -145,24 +145,24 @@ instance ArgPacket (Expr a, Expr b, Expr c, Expr d, Expr e)
 instance ArgDecls () () where
   toVDecl () = []
 instance ArgDecls (TVDecl a) (OneArg a) where
-  toVDecl (x1, t1) = [(x1, mkIType t1)]
+  toVDecl (x1, t1) = [(x1, toIType t1)]
 
 -- Generic binary arg decls; this makes us need UndecidableInstances
 instance (ArgDecls b c) => ArgDecls (TVDecl a, b) (a, c) where
-  toVDecl ((x, t), xts) = (x, mkIType t) : toVDecl xts
+  toVDecl ((x, t), xts) = (x, toIType t) : toVDecl xts
 
 -- Hacky 3,4,5-ary arg decls
 instance ArgDecls (TVDecl a, TVDecl b, TVDecl c) (a, b, c) where
   toVDecl ((x1, t1), (x2, t2), (x3, t3)) =
-    [(x1, mkIType t1), (x2, mkIType t2), (x3, mkIType t3)]
+    [(x1, toIType t1), (x2, toIType t2), (x3, toIType t3)]
 instance ArgDecls (TVDecl a, TVDecl b, TVDecl c, TVDecl d) (a, b, c, d) where
   toVDecl ((x1, t1), (x2, t2), (x3, t3), (x4, t4)) =
-    [(x1, mkIType t1), (x2, mkIType t2), (x3, mkIType t3), (x4, mkIType t4)]
+    [(x1, toIType t1), (x2, toIType t2), (x3, toIType t3), (x4, toIType t4)]
 instance ArgDecls (TVDecl a, TVDecl b, TVDecl c, TVDecl d, TVDecl e) 
          (a, b, c, d, e) where
   toVDecl ((x1, t1), (x2, t2), (x3, t3), (x4, t4), (x5, t5)) =
-    [(x1, mkIType t1), (x2, mkIType t2), (x3, mkIType t3), (x4, mkIType t4),
-     (x5, mkIType t5)]
+    [(x1, toIType t1), (x2, toIType t2), (x3, toIType t3), (x4, toIType t4),
+     (x5, toIType t5)]
 
 
 infixr 2 .||
@@ -261,7 +261,7 @@ var :: String -> Type a -> Expr a -> Prog (Expr a)
 var name t (E e) = do
   v <- freshName
   let name' = name ++ "_" ++ show v
-  add $ Decl (name', mkIType t) e
+  add $ Decl (name', toIType t) e
   return $ E $ Var name'
 
 infixl 0 .=

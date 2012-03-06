@@ -3,6 +3,34 @@
 {hyperref}
 \usepackage{graphicx}
 \usepackage{verbatim}
+
+\usepackage{listings}
+\lstset{
+  language=Haskell,
+  basicstyle=\small\ttfamily,
+  frame=trbl,
+  basewidth={0.5em,0.45em},
+%  commentstyle=\ttfamily\color{ForestGreen},
+  literate=*{+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+            {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+            {\\\\}{{\char`\\\char`\\}}1
+            {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+            {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2
+            %{\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
+            {>>}{{>>}}2 {>>=}{{>>=}}2
+            {|}{{$\mid$}}1
+}
+
+\lstnewenvironment{egcode}
+  {\lstset{frame=TRBL}}
+  {\lstset{frame=trbl}}
+
+\lstnewenvironment{code}
+  {\lstset{frame=}}
+  {}
+
+
+
 \newenvironment{smallverbatim}{\endgraf\small\verbatim}{\endverbatim} 
 \renewcommand{\t}{\texttt}
 \renewcommand{\b}{\textbf}
@@ -31,7 +59,7 @@
 % and where should we put the code link?
 % we should also move it to some better URL
 
-We present He-Man, a compiled, embedded, domain specific language in Haskell for
+We present He-Man \cite{HeMan}, a compiled, embedded, domain specific language in Haskell for
 building scalable network applications in a natural, straight-line manner while
 still producing efficient event loop-based code. He-Man programs are compact and
 measurements indicate that it performs acceptably. Our implementation is
@@ -260,7 +288,7 @@ functions invoke \b{Call} wrappers on the appropriate network calls.)
 
 \begin{figure}[ht]
 \centering
-\begin{smallverbatim}
+\begin{code}
 child_code = declare_thread [("child_fd", Int)] $
   \[child_fd] -> do
   ev <- setup_connection child_fd
@@ -270,14 +298,14 @@ child_code = declare_thread [("child_fd", Int)] $
     ifthen (amt_read .== 0) exit
     amt_written <- full_write ev buf amt_read
     ifthen (amt_written .< amt_read) exit
-\end{smallverbatim}
+\end{code}
 \caption{He-Man example from echo server.}
 \label{fig:code-ex}
 \end{figure}
 
 \begin{figure}[ht]
 \centering
-\begin{smallverbatim}
+\begin{code}
 do_nb_action :: IntE -> EventE -> Prog IntE
                 -> Prog IntE
 do_nb_action mode e action = do
@@ -294,10 +322,91 @@ do_read (fd, e) buf size =
   do_nb_action kEVENT_RD e (sock_read fd buf size)
 do_write (fd, e) buf size =
   do_nb_action kEVENT_WR e (sock_write fd buf size)
-\end{smallverbatim}
+\end{code}
 \caption{Implementation of ``blocking'' network calls.}
 \label{fig:generic}
 \end{figure}
+
+\subsection{Type system}
+
+It is important to provide some sort of type discipline for He-Man
+programs. Providing a type system in the front end allows us to
+guarentee that the C we output does not contain type errors, vastly
+simplifying development. We also take advantage of this to provide
+type abstractions above and beyond C's limited type system. % XXX: bad wording
+For example, He-Man's type system contains an abstract
+$\b{FD}$ type that is distinct from the type of integers.
+
+We offload the work of type checking He-Man programs to the Haskell
+type checker. Our method for doing this is fairly standard, following
+Leijen and Meijer \cite{Leijen:1999:DSE:1267936.1267945} in using
+phantom types to enforce typing.
+
+A fragment of the code implementing the He-Man type system is shown in
+Figure \ref{fig:types}. The internal type and expression
+representations are the datatypes \t{IExpr} and \t{IType}, and
+typed expressions are represented with the \t{Expr} data type
+constructor, which is a trival wrapper around \t{IExpr} parameterized
+over a phantom type. Operations on typed expressions have type
+signatures that restrict them to the proper types, and then peel away
+the wrapper to work on the \t{IExpr} underneath.
+
+% XXX: say something about GADTs??
+Types are represented by the \t{Type} GADT that is also parameterized
+over a phantom type representing the underlying type. Expression
+builder functions will convert \t{Type} values are to \t{Itype} using
+the \t{toItype} function, which does a simple pass-through conversion.
+The decision to make \t{Type} a GADT instead of a simple wrapper with
+constructor functions in the same manner as \t{Expr} is for purely
+aesthetic reasons: we felt that type annotations in He-Man code were
+more clearly readable if they were captialized, which required that
+they be datatype constructors.
+\footnote{The authors believe that this may be the worst reason to
+  choose to use GADTs to date.}
+
+\begin{figure}[ht]
+\centering
+\begin{code}
+-- Some dummy types for the phantom types
+data FD
+data Buffer
+data Event
+
+-- The Expr types
+newtype Expr a = E IExpr
+type IntE = Expr Int
+type FdE = Expr FD
+
+data Type a where
+  Int :: Type Int
+  FD :: Type FD
+  -- ...
+
+toIType :: Type a -> IType
+toIType Int = IInt
+toIType FD = IFD
+-- ...
+
+-- Lift functions over IExprs to ones over Exprs
+typ1 :: (IExpr -> IExpr) -> (Expr a -> Expr b)
+typ1 f (E e1) = E (f e1)
+typ2 :: (IExpr -> IExpr -> IExpr) ->
+        (Expr a -> Expr b -> Expr c)
+typ2 f (E e1) (E e2) = E (f e1 e2)
+
+-- Some typed He-Man functions
+(.<) :: IntE -> IntE -> BoolE
+(.<) = typ2 $ RelnOp Lt
+(.==) :: Expr a -> Expr a -> BoolE
+(.==) = typ2 $ RelnOp Eq
+var :: String -> Type a -> Expr a -> Prog (Expr a)
+var = ...
+\end{code}
+\caption{He-Man expression typing} % XXX
+\label{fig:types}
+\end{figure}
+
+TODO: Talk about argument packets.
 
 \subsection{Back-end}
 
