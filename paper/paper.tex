@@ -1,4 +1,4 @@
-\documentclass[preprint,10pt]{sigplanconf}
+\documentclass[preprint]{sigplanconf}
 \usepackage[colorlinks=true,linkcolor=black,urlcolor=black,citecolor=black]%
 {hyperref}
 \usepackage{graphicx}
@@ -337,10 +337,9 @@ type abstractions above and beyond C's limited type system. % XXX: bad wording
 For example, He-Man's type system contains an abstract
 $\b{FD}$ type that is distinct from the type of integers.
 
-We offload the work of type checking He-Man programs to the Haskell
-type checker. Our method for doing this is fairly standard, following
-Leijen and Meijer \cite{Leijen:1999:DSE:1267936.1267945} in using
-phantom types to enforce typing.
+We offload the work of type checking He-Man programs to the Haskell type
+checker. Our method for doing this is fairly standard, following Leijen and
+Meijer \cite{LeijenMeijer} in using phantom types to enforce typing.
 
 A fragment of the code implementing the He-Man type system is shown in
 Figure \ref{fig:types}. The internal type and expression
@@ -669,6 +668,7 @@ when the thread exits). On a 64-bit system, the total overhead comes
 out to 88 bytes, and could easily be reduced further (e.g., by using
 singly-linked lists).  For comparison, the default thread stack size
 under NPTL on Linux is 2 megabytes.
+%% XXX update with new info?
 
 % see how many threads we can spawn with Memory.hs
 
