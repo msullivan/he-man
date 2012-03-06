@@ -1,6 +1,7 @@
 module Language.HeMan.Lib where
 
 import Language.HeMan.Syntax
+import Control.Applicative
 
 -- Coreish runtime functions
 mk_nb_event :: FdE -> IntE -> Prog EventE
@@ -37,9 +38,9 @@ sock_listen :: FdE -> IntE -> Prog IntE
 sock_listen fd q_limit =
   call (CFn "listen") Int (fd, q_limit)
 
-sock_accept :: FdE -> Prog FdE
+sock_accept :: FdE -> Prog IntE
 sock_accept fd =
-  callName "accepted_fd" (CFn "accept") FD (fd, num 0, num 0)
+  callName "accepted_fd" (CFn "accept") Int (fd, num 0, num 0)
 
 sock_read :: FdE -> BufferE -> IntE -> Prog IntE
 sock_read fd buf len =
@@ -120,7 +121,10 @@ data_to_int :: DataE -> IntE
 data_to_int d = callE (CFn "data_to_int") Int (d)
 
 
--- For debugging
+mk_fd :: IntE -> FdE
+mk_fd = unsafeExprCoerce
+
+-- for debugging
 print_int n  =
   call' (CFn "print_int") (n)
 
@@ -141,24 +145,23 @@ kO_RDONLY = constant "O_RDONLY"
 kEAGAIN = constant "EAGAIN"
 
 -- This implementation depends on level triggered semantics
-do_nb_action :: ExprFailable a =>
-                Type a -> IntE -> Expr Event -> Prog (Expr a) ->
-                Prog (Expr a)
-do_nb_action t mode e action = do
-  res <- var "result" t (E (NumLit (-1))) -- HACK! bad!
+do_nb_action :: IntE -> EventE -> Prog IntE -> Prog IntE
+do_nb_action mode e action = do
+  res <- var "result" Int (-1)
   err <- var "err" Int kEAGAIN
-  while (isFailure res .&& err .== kEAGAIN) $ do
+  while (res .< 0 .&& err .== kEAGAIN) $ do
     prepare_event e mode
     wait e
     res .=. action
     err .= errno
   return res
 
-accept (fd, e) = do_nb_action FD kEVENT_RD e (sock_accept fd)
-do_read (fd, e) buf size = do_nb_action Int kEVENT_RD e
-                           (sock_read fd buf size)
-do_write (fd, e) buf size = do_nb_action Int kEVENT_WR e
-                            (sock_write fd buf size)
+accept (fd, e) =
+  mk_fd <$> do_nb_action kEVENT_RD e (sock_accept fd)
+do_read (fd, e) buf size =
+  do_nb_action kEVENT_RD e (sock_read fd buf size)
+do_write (fd, e) buf size =
+  do_nb_action kEVENT_WR e (sock_write fd buf size)
 
 -- TODO remove this
 full_write_naive ev buf size = do
