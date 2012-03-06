@@ -64,7 +64,7 @@ don't require preemptable, independently scheduled threads \cite{Vinoski}.
 
 By far the leanest approach is to write an event loop around kernel facilities
 for multiplexed, non-blocking I/O, such as \t{select}, \t{poll}, \t{epoll}, or
-\t{kquery}. In this model, all blocking occurs at a single call site in the
+\t{kqueue}. In this model, all blocking occurs at a single call site in the
 code. The programmer is responsible for explicitly maintaining per-client state
 and invoking the appropriate client on each I/O event.
 
@@ -489,12 +489,12 @@ conditionals outside of block tail position.
 \subsection{HTTP Server}
 
 To test the suitability of our system for more complicated programs
-and to demonstrate seperating network logic and application logic, we
+and to demonstrate separating network logic and application logic, we
 built a simple (and bad) HTTP 1.0 server. The network logic is written
 in He-Man and request parsing is written in C. The C side is
 implemented as a function that takes a buffer and returns whether it
 forms a complete HTTP request and, if so, fills a buffer with the
-filename to serve. The entire server is 54 lines of He-Man haskell and
+file name to serve. The entire server is 54 lines of He-Man Haskell and
 27 lines of C. It suffers from a number of major deficiencies, but is
 complete enough to benchmark.
 
