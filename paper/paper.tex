@@ -233,29 +233,28 @@ functions invoke \b{Call} wrappers on the appropriate network calls.)
 \centering
 \bnf{
 \i{Stmt}
-\p{\b{Decl} (\i{Var}, \i{Type}) \i{Expr}}
-\a{\b{While} \i{Expr} [\i{Stmt}]}
-\a{\b{If} \i{Expr} [\i{Stmt}] [\i{Stmt}]}
-\a{\b{Spawn} ([(\i{Var}, \i{Type})], [\i{Stmt}]) [\i{Expr}]}
-\a{\b{Assign} \i{Expr} \i{Expr}}
-\a{\b{Exp} \i{Expr}}
-\a{\b{Wait} \i{Expr}}
+\p{\b{Decl} (\i{Var}, \i{Type}) \i{DExpr}}
+\a{\b{While} \i{DExpr} [\i{Stmt}]}
+\a{\b{If} \i{DExpr} [\i{Stmt}] [\i{Stmt}]}
+\a{\b{Spawn} ([(\i{Var}, \i{Type})], [\i{Stmt}]) [\i{DExpr}]}
+\a{\b{Assign} \i{DExpr} \i{DExpr}}
+\a{\b{Exp} \i{DExpr}}
+\a{\b{Wait} \i{DExpr}}
 \a{\b{Exit}}
-\i{Expr}
-\p{\b{Call} \i{String} [\i{Expr}]}
-\a{\b{Arith} \i{ArithOp} \i{Expr} \i{Expr}}
-\a{\b{ArithUnop} \i{ArithUnop} \i{Expr}}
-\a{\b{RelnOp} \i{RelnOp} \i{Expr} \i{Expr}}
+\i{DExpr}
+\p{\b{Call} \i{String} [\i{DExpr}]}
+\a{\b{Arith} \i{ArithOp} \i{DExpr} \i{DExpr}}
+\a{\b{ArithUnop} \i{ArithUnop} \i{DExpr}}
+\a{\b{RelnOp} \i{RelnOp} \i{DExpr} \i{DExpr}}
 \a{\b{Constant} \i{String}}
 \a{\b{NumLit} \i{Integer}}
 \a{\b{StringLit} \i{String}}
-\a{\b{Var} \i{String}}
-\a{\b{CurThread}}
+\a{\b{Var} \i{var}}
 \i{Type} 
-\p{\b{Int} $\mid$ \b{Bool} $\mid$ \b{String}
-   $\mid$ \b{Buffer} $\mid$ \b{Event}}
+\p{\b{Int} $\mid$ \b{Bool} $\mid$ \b{FD}
+   $\mid$ \b{Buffer} $\mid$ \b{Event} $\mid$ $\cdots$}
 }
-\caption{Front-end grammar.}
+\caption{Front-end abstract syntax.}
 \label{fig:front-syntax}
 \end{figure}
 
@@ -319,7 +318,7 @@ do_write (fd, e) buf size =
 \a{\b{Exp} \i{Expr}}
 \a{\b{Spawn} \i{label} [((\i{Var}, \i{Type}), \i{Expr})]}
 }
-\caption{Back-end grammar.}
+\caption{Back-end abstract syntax.}
 \label{fig:back-syntax}
 \end{figure}
 
