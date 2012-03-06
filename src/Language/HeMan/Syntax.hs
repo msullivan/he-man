@@ -109,17 +109,12 @@ class ArgPacket a b | a -> b, b -> a where
 class ArgDecls a b | a -> b, b -> a where
   toVDecl :: a -> [VDecl]
 
--- A dummy one argument constructor for use in guarenteeing that
--- ArgPacket and ArgDecl type classes have a one to one mapping
--- between their parameters.
-data OneArg a
-
 -- This is some ugly shit.
 -- Nullary and unary arg packets
 instance ArgPacket () () where
   toIExprList () = []
   makeVars [] = ()
-instance ArgPacket (Expr a) (OneArg a) where
+instance ArgPacket (Expr a) [a] where
   toIExprList (E x) = [x]
   makeVars [x] = E $ Var x
 
@@ -144,7 +139,7 @@ instance ArgPacket (Expr a, Expr b, Expr c, Expr d, Expr e)
 -- Nullary and unary arg decls
 instance ArgDecls () () where
   toVDecl () = []
-instance ArgDecls (TVDecl a) (OneArg a) where
+instance ArgDecls (TVDecl a) [a] where
   toVDecl (x1, t1) = [(x1, toIType t1)]
 
 -- Generic binary arg decls; this makes us need UndecidableInstances
