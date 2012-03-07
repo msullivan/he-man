@@ -103,10 +103,10 @@ unsafeExprCoerce :: Expr a -> Expr b
 unsafeExprCoerce (E x) = E x
 
 -- TODO: Document this trick.
-class ArgPacket a b | a -> b, b -> a where
-  toIExprList :: a -> [IExpr]
-  makeVars :: [String] -> a
-  toITypeList :: b -> [IType]
+class ArgPacket exps tys | exps -> tys, tys -> exps where
+  toIExprList :: exps -> [IExpr]
+  makeVars :: [String] -> exps
+  toITypeList :: tys -> [IType]
 
 -- This is some ugly shit.
 -- Nullary and unary arg packets
@@ -269,7 +269,9 @@ exit = add Exit
 wait :: EventE  -> Prog ()
 wait (E e) = add $ Wait e
 
-spawn :: ArgPacket a b => ThreadCode a -> a -> Prog ()
+spawn :: ArgPacket exps tys =>
+         ThreadCode exps -> exps ->
+         Prog ()
 spawn (Thr thread) args = add $ Spawn thread (toIExprList args)
 
 extract :: Prog a -> Prog (a, [Stmt])
@@ -295,7 +297,9 @@ call' fn args = add $ Exp (Call fn (toIExprList args))
 callName :: ArgPacket a b => String -> Prim -> Type c -> a -> Prog (Expr c)
 callName name fn t args = var name t (E $ Call fn (toIExprList args))
 
-call :: ArgPacket a b => Prim -> Type c -> a -> Prog (Expr c)
+call :: ArgPacket exps tys =>
+        Prim -> Type c -> exps ->
+        Prog (Expr c)
 call fn t args = callName "tmp" fn t args
 
 callE :: ArgPacket a b => Prim -> Type c -> a -> (Expr c)
@@ -303,8 +307,9 @@ callE fn t args = E $ Call fn (toIExprList args)
 
 
 -- Helper to construct a ThreadCode
-declare_thread :: (ArgPacket a b) =>
-                  b -> (a -> Prog ()) -> ThreadCode a
+declare_thread :: (ArgPacket exps tys) =>
+                  tys -> (exps -> Prog ()) ->
+                  ThreadCode exps
 declare_thread decls f = Thr (decls', desugar prog)
   where prog = f (makeVars (map fst decls'))
         arg_names = map (\n -> "arg_" ++ show n) [0..]
