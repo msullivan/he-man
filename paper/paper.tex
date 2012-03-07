@@ -331,7 +331,7 @@ do_write (fd, e) buf size =
 
 It is important to provide some sort of type discipline for He-Man
 programs. Providing a type system in the front end allows us to
-guarentee that the C we output does not contain type errors, vastly
+guarantee that the C we output does not contain type errors, vastly
 simplifying development. We also take advantage of this to provide
 type abstractions above and beyond C's limited type system. % XXX: bad wording
 For example, He-Man's type system contains an abstract
@@ -345,7 +345,7 @@ A fragment of the code implementing the He-Man type system is shown in
 Figure \ref{fig:types}. The internal type and expression
 representations are the datatypes \t{IExpr} and \t{IType}, and
 typed expressions are represented with the \t{Expr} data type
-constructor, which is a trival wrapper around \t{IExpr} parameterized
+constructor, which is a trivial wrapper around \t{IExpr} parameterized
 over a phantom type. Operations on typed expressions have type
 signatures that restrict them to the proper types, and then peel away
 the wrapper to work on the \t{IExpr} underneath.
@@ -358,7 +358,7 @@ the \t{toItype} function, which does a simple pass-through conversion.
 The decision to make \t{Type} a GADT instead of a simple wrapper with
 constructor functions in the same manner as \t{Expr} is for purely
 aesthetic reasons: we felt that type annotations in He-Man code were
-more clearly readable if they were captialized, which required that
+more clearly readable if they were capitalized, which required that
 they be datatype constructors.
 \footnote{The authors believe that this may be the worst reason to
   choose to use GADTs to date.}
@@ -395,9 +395,9 @@ typ2 f (E e1) (E e2) = E (f e1 e2)
 
 -- Some typed He-Man functions
 (.<) :: IntE -> IntE -> BoolE
-(.<) = typ2 $ RelnOp Lt
+(.<) = typ2 (RelnOp Lt)
 (.==) :: Expr a -> Expr a -> BoolE
-(.==) = typ2 $ RelnOp Eq
+(.==) = typ2 (RelnOp Eq)
 var :: String -> Type a -> Expr a -> Prog (Expr a)
 var = ...
 \end{code}
@@ -406,27 +406,34 @@ var = ...
 \end{figure}
 
 Type checking foreign function calls and thread declaration and
-spawning is somewhat more interesting.
+spawning is somewhat more interesting.  For foreign function calls,
+our main concern was being able to write a single wrapper for call
+that handles a varying number of typed arguments. We want more than
+this, however: we want to ensure that both the code for a declared
+thread uses its arguments properly at the declared types code and that
+spawning threads provides arguments of the correct types.
 % and maybe a bit novel? I dunno.
-For foreign function calls, our main concern was being able to write a
-single wrapper for call that handles a varying number of typed
-arguments. To this end, we created an \t{ArgPacket} type class that
-requires the ability to convert a packet into a list of \t{IExpr} and
-to construct an \t{ArgPacket} from a list of variable names. Instances
-of \t{ArgPacket} are provided for packets of $0$ to $5$ \t{Expr}
-arguments. Now we can parameterize a \t{Call} wrapper over an
-\t{ArgPacket} to provide a \t{Expr} based interface.
 
-For thread declarations, we can produce a similar \t{ArgDecl} class
-and associated instances that can convert a packet of \t{Type}s into a
-list of \t{IType}s.
+A fragment of the code implementing typing for these features is shown
+in Figure \ref{fig:arg-packets}. The key is the multi-parameter type
+class \t{ArgPacket}. \t{ArgPacket} is parameterized over related
+tuples \footnote{Technically speaking, the unary \t{ArgPacket}s are
+  not actually tuples.} of expressions and types. The idea is that
+there exists an instance \t{ArgPacket exps tys} if and only if
+\t{exps} and \t{tys} are tuples of \t{Expr}s and \t{Type}s,
+respectively, the tuples have the same number of elements, and for
+each pair of corresponding elements in the two tuples, the \t{Type}
+represents the type of the \t{Expr} (that is, they have the same
+phantom type argument). To enforce this one-to-one correspondence and
+to allow the Haskell inferencer to use the information it provides, we
+use functional dependencies % XXX: cite, or something?
+to declare that both \t{exps} and \t{tys} are uniquely determined by
+the other.
 
-We want more than this, however: we want to ensure that both the code
-for a declared thread uses its arguments properly at the declared
-types code and that spawning threads provides arguments of the correct
-types. To do this, we need some way to extract all of the phantom
-types of the \t{Expr}s and \t{Type}s in \t{ArgPacket}s and
-\t{ArgDecl}s
+Then, by parameterizing the wrapper functions for foreign function
+calls and thread declaration and spawning over \t{ArgPacket exps tys},
+we get the desired typing guarantees.
+% XXX: is this explained fully?
 
 \begin{figure}[ht]
 \centering
@@ -439,11 +446,11 @@ class ArgPacket exps tys | exps -> tys,
 
 instance ArgPacket (Expr a) (Type a) where
   toIExprList (E e) = [e]
-  makeVars [x] = E $ Var x
+  makeVars [x] = E (Var x)
   toITypeList t = [toIType t]
 instance ArgPacket (Expr a, Expr b) (Type a, Type b) where
   toIExprList (E e1, E e2) = [e1, e2]
-  makeVars [x1, x2] = (E $ Var x1, E $ Var x2)
+  makeVars [x1, x2] = (E (Var x1), E (Var x2))
   toITypeList (t1, t2) = [toIType t1, toIType t2]
 -- ...
 
