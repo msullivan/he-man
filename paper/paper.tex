@@ -431,35 +431,33 @@ types of the \t{Expr}s and \t{Type}s in \t{ArgPacket}s and
 \begin{figure}[ht]
 \centering
 \begin{code}
-class ArgPacket a b | a -> b, b -> a where
-  toIExprList :: a -> [IExpr]
-  makeVars :: [String] -> a
-class ArgDecls a b | a -> b, b -> a where
-  toITypeList :: a -> [IType]
+class ArgPacket exps tys | exps -> tys,
+                           tys -> exps where
+  toIExprList :: exps -> [IExpr]
+  makeVars :: [String] -> exps
+  toITypeList :: tys -> [IType]
 
-instance ArgPacket (Expr a) [a] where
-  toIExprList (E x) = [x]
-  makeVars [x] = E (Var x)
-instance ArgPacket (Expr a, Expr b) (a, b) where
-  toIExprList (E x1, E x2) = [x1, x2]
-  makeVars [x1, x2] = (E (Var x1), E (Var x2))
--- ...
-
-instance ArgDecls (Type a) [a] where
-  toITypeList t1 = [toIType t1]
-instance ArgDecls (Type a, Type b) (a, b) where
+instance ArgPacket (Expr a) (Type a) where
+  toIExprList (E e) = [e]
+  makeVars [x] = E $ Var x
+  toITypeList t = [toIType t]
+instance ArgPacket (Expr a, Expr b) (Type a, Type b) where
+  toIExprList (E e1, E e2) = [e1, e2]
+  makeVars [x1, x2] = (E $ Var x1, E $ Var x2)
   toITypeList (t1, t2) = [toIType t1, toIType t2]
 -- ...
 
-declare_thread :: (ArgPacket a c, ArgDecls b c) =>
-                  b -> (a -> Prog ()) ->
-                  ThreadCode c
+declare_thread :: (ArgPacket exps tys) =>
+                  tys -> (exps -> Prog ()) ->
+                  ThreadCode exps
 declare_thread = ...
-spawn :: ArgPacket a b => ThreadCode b -> a ->
-                          Prog ()
+spawn :: ArgPacket exps tys =>
+         ThreadCode exps -> exps ->
+         Prog ()
 spawn = ...
-call :: ArgPacket a b => Prim -> Type c -> a ->
-                         Prog (Expr c)
+call :: ArgPacket exps tys =>
+        Prim -> Type c -> exps ->
+        Prog (Expr c)
 call = ...
 
 \end{code}
