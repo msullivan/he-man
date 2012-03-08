@@ -44,6 +44,8 @@
 \def\pp#1{& & #1 \cr}
 \def\a#1{& $\mid$ & #1 \cr}
 
+% XXX: We need to cite ElliottEtAl somewhere!
+
 %XXX: new title?
 \title{He-Man: A domain-specific language for lightweight concurrency}
 %\subtitle{I said hey, what's goin' on}
@@ -248,8 +250,8 @@ can potentially result in code size explosion if used carelessly.
 
 As an example of the power that Haskell and the monadic style gives
 us, Figure \ref{fig:generic} shows our library routines for simulating
-blocking network operations. \t{do\_nb\_action} takes an event
-\t{Expr} and a \t{Prog Expr} action representing a network call that
+blocking network operations. \t{do\_nb\_action} takes an
+\t{Expr} and a \t{Prog IntE} action representing a network call that
 can return \t{EAGAIN} and produces an action that generates code to
 simulate a blocking network operation. This allows us to describe how
 to simulate blocking I/O in a generic way, and then invoke it to
@@ -290,7 +292,7 @@ functions invoke \b{Call} wrappers on the appropriate network calls.)
 \centering
 \begin{code}
 child_code = declare_thread (Int) $
-  \[child_fd] -> do
+  \child_fd -> do
   ev <- setup_connection child_fd
   buf <- new_buf bufsize
   while 1 $ do
