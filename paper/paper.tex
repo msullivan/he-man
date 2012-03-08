@@ -135,34 +135,43 @@ We identify our contributions as:
 %% talking about one possible way to write event based things (the way
 %% He-Man generates).
 
-Networking applications require a very constrained form of
-concurrency. Because I/O (both network and disk) latency dominates the
-computation time, each client's thread of execution spends most of its
-time waiting on I/O. In particular, we would like to always yield to a
-client no longer blocked on I/O; we need not yield to blocked clients,
-nor do we (usually) need arbitrary interleaving of execution.
+Network applications require a very constrained form of
+concurrency. Because in most network applications, I/O (both network
+and disk) latency dominates the computation time, each client's thread
+of execution spends most of its time waiting on I/O. In particular, we
+would like to always yield to a client no longer blocked on I/O; we
+need not yield to blocked clients, nor do we (usually) need arbitrary
+interleaving of execution.
 
-%% XXX: do we really want to talk about this?
-As of version 2.5.44, Linux has supported \t{epoll} for non-blocking
-multiplexing I/O. A server can register any number of file descriptors with
-\t{epoll\_ctl}, and a call to \t{epoll\_wait} returns the ready descriptors. 
+In the event loop model, network I/O is done using non-blocking
+\t{read} and \t{write} calls and all of the blocking for I/O is
+centralized in a single call to a multiplexing system call such as
+\t{select} or \t{epoll}. The multiplexing call will block until there
+is some I/O ready to be performed and indicate to the application
+which file descriptors are ready. From this, the application then
+needs to decide how handle these events. This requires, for each
+connection, having some sort of state machine to track what state the
+connection is in and what needs to happen next, as well as other local
+state.
 
-In the event loop model, all blocking I/O must occur in a single loop around
-\t{epoll\_wait}. Each thread is stored as a \t{struct} containing thread-local
-state, including the next instruction pointer, and each registered descriptor
-has a pointer to the thread waiting on it. Instead of performing an I/O call, a
-thread simply registers a new descriptor and returns back to the main loop;
-whenever a descriptor is ready, the main loop jumps to the instruction pointer
-of the thread waiting on it. Spawning a new thread requires only allocating a
-new thread \t{struct}, and registering it in the main loop.
+One common scheme for doing this involves registering a function
+pointer with the event loop to be called on an event. Typically each
+connection is also associated with a structure of connection local
+data. Instead of making a blocking system call, then, an application
+registers an event with the event loop along with the function to call
+when it occurs, and then returns back to the loop.
 
-Each thread must be split into one function for each jump target, and
-thread-local state must be accessed via the thread \t{struct} shared between
-these functions. Furthermore, because I/O only occurs in the main loop, these
-functions must return immediately after registering new descriptors. As a
-result, each thread is split up into quite a few functions in this paradigm.
-Because this translation from threaded to event-based is quite mechanical, we
-are able to perform it automatically in the He-Man back-end.
+The advantage of this scheme is that it is highly scalable and can be
+efficient: handling a new connection typically just involves
+allocating a new structure and registering it with the event loop. The
+disadvantage is that now network facing code needs to be scattered
+through many small functions, with all access to connection state
+mediated through a shared structure.
+
+The event loop model is then, essentially, built around closure
+converted trampolining continuation passing style. These are well
+studied problems and can easily be done mechanically in the He-Man
+backend.
 
 \section{Implementation}
 
