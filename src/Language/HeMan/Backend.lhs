@@ -69,10 +69,6 @@ type Flattener = RWS ThreadName ([Block],[Thread]) Label
 flattenPrgm stmts = ((0,0,s,t):blocks,(0,[]):thds) where
   ((s,t),_,(blocks,thds)) = runRWS (flattenStmts stmts [] Exit) 0 1
   
-registerEvent event = [Front.Exp $
-                       Front.Call (Front.CFn "register_event")
-                       [Front.CurThread, event]]
-
 fresh = do
   x <- get
   modify (+1)
