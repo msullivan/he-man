@@ -129,33 +129,6 @@ We identify our contributions as:
   language design and implementation.
 \end{enumerate}
 
-
-%% XXX: Should we put this at the end?
-\section{Related work}
-
-The C10K problem is particularly evident in the context of HTTP servers, which
-routinely maintain many concurrent connections. As we discuss in Section
-\ref{sec:evaluation}, Apache does not scale particularly well. The popular
-Lighttpd and Nginx HTTP server projects were both started with the explicit goal
-of outperforming Apache with respect to the C10K problem \cite{Lighttpd,Nginx},
-and both use event-based architectures similar to He-Man. 
-
-A number of functional languages support lightweight threads with user-space
-scheduling, most notably Erlang, which was designed for highly concurrent
-telecommunications applications, and easily scales to 20,000 clients
-\cite{Hellstrom}. The Haskell runtime supports a variety of concurrency
-primitives which permit a lightweight threaded programming model \cite{LiEtAl}.
-
-%A number of custom network stack implementations exist for functional
-%languages, such as FoxNet for Standard ML \cite{BiagioniEtAl}, and 
-
-He-Man is most similar to Li and Zdancewic's Haskell implementation of a hybrid
-event/thread programming model for network applications \cite{LiZdancewic}.
-Their project has similar goals to ours, but is implemented entirely within
-Haskell. As a result, unlike He-Man, their framework requires entire
-applications to be written in Haskell, and incurs runtime overhead from the
-Haskell system.
-
 \section{The event loop model}
 %% XXX: it isn't really clear what's going on in this section; it
 %% doesn't /really/ talk about event loop stuff in general. It is
@@ -663,11 +636,11 @@ just looking at the core read/write loop, the difference is much more
 apparent: the C version is 38 lines of code, and the He-Man version is
 5.
 
-% XXX: update
 The generated code is substantially less tight than the C version,
-although it is unlikely to be any slower in practice. It has 15 states
-and is 319 lines of C. This could be reduced substantially by allowing
-conditionals outside of block tail position.
+although it is unlikely to be any slower in practice. It has 10 states
+and is 240 lines of C.
+%This could be reduced substantially by allowing
+%conditionals outside of block tail position.
 
 \subsection{HTTP Server}
 
@@ -728,16 +701,42 @@ Apache may require spawning new OS level threads.
 The per-thread memory overhead imposed by He-Man is very small: it
 consists of a thread id, list pointers for the scheduling queue, the
 next state to enter, a pointer to the most recently received event,
-and list heads and tails for lists of the events being waited on,
-events owned by the thread, and buffers owned by the thread (the
-latter two are so that we can automatically reclaim these resources
-when the thread exits). On a 64-bit system, the total overhead comes
-out to 88 bytes, and could easily be reduced further (e.g., by using
-singly-linked lists).  For comparison, the default thread stack size
-under NPTL on Linux is 2 megabytes.
-%% XXX update with new info?
+and list heads and tails for lists of events owned by the thread and
+buffers owned by the thread (the latter two are so that we can
+automatically reclaim these resources when the thread exits). On a
+64-bit system, the total overhead comes out to 64 bytes, and could
+easily be reduced further (e.g., by using singly-linked lists).  For
+comparison, the default thread stack size under NPTL on Linux is 2
+megabytes.
 
 % see how many threads we can spawn with Memory.hs
+
+\section{Related work}
+
+The C10K problem is particularly evident in the context of HTTP
+servers, which routinely maintain many concurrent connections. As we
+discussed in Section \ref{sec:evaluation}, Apache does not scale
+particularly well. The popular Lighttpd and Nginx HTTP server projects
+were both started with the explicit goal of outperforming Apache with
+respect to the C10K problem \cite{Lighttpd,Nginx}, and both use
+event-based architectures similar to He-Man.
+
+A number of functional languages support lightweight threads with
+user-space scheduling, most notably Erlang, which was designed for
+highly concurrent telecommunications applications, and easily scales
+to 20,000 clients \cite{Hellstrom}. The Haskell runtime supports a
+variety of concurrency primitives which permit a lightweight threaded
+programming model \cite{LiEtAl}.
+
+%A number of custom network stack implementations exist for functional
+%languages, such as FoxNet for Standard ML \cite{BiagioniEtAl}, and
+
+He-Man is most similar to Li and Zdancewic's Haskell implementation of
+a hybrid event/thread programming model for network applications
+\cite{LiZdancewic}.  Their project has similar goals to ours, but is
+implemented entirely within Haskell. As a result, unlike He-Man, their
+framework requires entire applications to be written in Haskell, and
+incurs runtime overhead from the Haskell system.
 
 
 %% XXX: needs serious work
