@@ -9,8 +9,9 @@ bufsize = 4096*4
 http_parse :: BufferE -> IntE -> Prog IntE
 http_parse buf len =
   callName "parse_result" (CFn "http_parse") Int (buf, len)
-
-response_header = "HTTP/1.0 200 OK\r\n\r\n"
+http_make_hdr :: BufferE -> IntE -> FdE -> Prog IntE
+http_make_hdr buf len fd =
+  callName "hdr_length" (CFn "http_make_hdr") Int (buf, len, fd)
 
 setup_connection :: FdE -> Prog (FdE, EventE)
 setup_connection fd = do
@@ -50,9 +51,8 @@ child_code = declare_thread (FD) $
   ifE' (isFailure file_fd) exit
   let cleanup = close file_fd >> exit
 
-  let hdr_length = num $ length response_header
-  header <- var "output_header" Buffer (stringLit response_header)
-  amount_written <- full_write ev header hdr_length
+  hdr_length <- http_make_hdr buf bufsize file_fd
+  amount_written <- full_write ev buf hdr_length
   ifE' (amount_written .< hdr_length) cleanup
   
   while 1 $ do

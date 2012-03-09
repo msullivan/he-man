@@ -43,3 +43,13 @@ int http_parse(char *buf, int len)
 	//printf("opening file: %s\n", buf);
 	return 1;
 }
+
+int http_make_hdr(char *buf, int len, int fd)
+{
+	struct stat sbuf;
+	fstat(fd, &sbuf);
+
+	return snprintf(buf, len,
+	                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: %d\r\n\r\n",
+	                sbuf.st_size);
+}
