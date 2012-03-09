@@ -156,6 +156,17 @@ do_nb_action mode e action = do
     err .= errno
   return res
 
+do_nb_action_nowait :: IntE -> EventE -> Prog IntE -> Prog IntE
+do_nb_action_nowait mode e action = do
+  res <- action
+  err <- var "err" Int errno
+  while (res .< 0 .&& err .== kEAGAIN) $ do
+    prepare_event e mode
+    wait e
+    res .=. action
+    err .= errno
+  return res
+
 accept (fd, e) =
   mk_fd <$> do_nb_action kEVENT_RD e (sock_accept fd)
 do_read (fd, e) buf size =
