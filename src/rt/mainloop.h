@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <libaio.h>
 #include "variable_queue.h"
 
 typedef enum event_type_t { EVENT_NB, EVENT_CHANNEL, /* EVENT_AIO */ }
@@ -77,7 +76,6 @@ typedef struct thread_t {
 	buf_queue_t bufs;
 	thread_cont *cont;
 } thread_t;
-
 
 
 void inc_refcount(void *p);
