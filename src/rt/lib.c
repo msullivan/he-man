@@ -8,6 +8,13 @@ int set_sock_reuse(int fd)
 	                  &value, sizeof(value));
 }
 
+int set_sock_cork(int fd)
+{
+	int value = 1;
+	return setsockopt(fd, IPPROTO_TCP, TCP_CORK,
+	                  &value, sizeof(value));
+}
+
 int make_socket_non_blocking(int sfd)
 {
 	int flags, s;

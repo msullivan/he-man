@@ -17,12 +17,16 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/sendfile.h>
 
 #define EVENT_RD (EPOLLIN)
 #define EVENT_WR (EPOLLOUT)
 #define EVENT_RDWR (EPOLLIN|EPOLLOUT)
 
 int set_sock_reuse(int fd);
+int set_sock_cork(int fd);
 int make_socket_non_blocking(int sfd);
 int sock_bind_v4(int fd, int addr, int port);
 int print_int(int n);
@@ -38,6 +42,7 @@ int print_int(int n);
 
 // This shouldn't be here. Programs should be able to include other headers
 int http_parse(char *buf, int len);
-int http_make_hdr(char *buf, int len, int fd);
+int http_make_hdr(char *buf, int len, int size);
+int get_file_size(int fd);
 
 #endif
