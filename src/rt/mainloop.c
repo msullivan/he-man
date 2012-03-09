@@ -12,8 +12,10 @@
 #include <stdbool.h>
 #include <signal.h>
 
+#if ENABLE_AIO
 #include <libaio.h>
 #include <sys/eventfd.h>
+#endif
 
 #include <pthread.h>
 
@@ -31,9 +33,11 @@ int next_tid = 0;
 
 static struct {
 	int epoll_fd;
+#if ENABLE_AIO
 	io_context_t aio_ctx;
 	int aio_eventfd;
 	struct event_t *aio_dummy_event;
+#endif
 #if MT_RUNTIME
 	pthread_mutex_t sched_lock;
 #endif
@@ -238,7 +242,7 @@ msg_data_t channel_recv(channel_t *ch)
 	return ret;
 }
 
-
+#if ENABLE_AIO
 static void handle_aio_event(struct io_event *event)
 {
 	abort();
@@ -248,6 +252,7 @@ static void handle_aio_event(struct io_event *event)
 	handle_event(ev);
 	*/
 }
+#endif
 static void handle_epoll_event(struct epoll_event *event)
 {
 	event_t *ev = event->data.ptr;
@@ -258,8 +263,9 @@ static void handle_epoll_event(struct epoll_event *event)
 // and no aio events are expected, epoll will block.
 static void do_poll(bool can_sleep)
 {
-	struct io_event aio_events[MAX_EVENTS];
 	struct epoll_event epoll_events[MAX_EVENTS];
+#if ENABLE_AIO
+	struct io_event aio_events[MAX_EVENTS];
 
 	// We need to be careful to not let either aio or epoll events
 	// starve the other. We do this by always doing nonblocking polls
@@ -274,6 +280,9 @@ static void do_poll(bool can_sleep)
 	for (int i = 0; i < aio_cnt; i++) {
 		handle_aio_event(&aio_events[i]);
 	}
+#else
+#define expect_aio 1
+#endif
 
 	// If we aren't expecting aio, block indefinitely, otherwise
 	// just poll.
@@ -281,12 +290,15 @@ static void do_poll(bool can_sleep)
 	int epoll_cnt = epoll_wait(state.epoll_fd, epoll_events,
 	                           MAX_EVENTS, epoll_timeout);
 	for (int i = 0; i < epoll_cnt; i++) {
+#if ENABLE_AIO
 		if (epoll_events[i].data.ptr == state.aio_dummy_event) {
 			uint64_t eventfd_val;
 			if (read(state.aio_eventfd, &eventfd_val,
 			         sizeof(eventfd_val)) < 0)
 				fail(1, "eventfd read");
-		} else {
+		} else
+#endif
+		{
 			handle_epoll_event(&epoll_events[i]);
 		}
 	}
@@ -343,12 +355,13 @@ void setup_main_loop(void)
 	int ret;
 
 	signal(SIGPIPE, SIG_IGN);
-	
-	static event_t aio_dummy_event;
-	state.aio_dummy_event = &aio_dummy_event;
 
 	state.epoll_fd = epoll_create(1);
 	if (state.epoll_fd < 0) fail(1, "epoll_create");
+
+#if ENABLE_AIO
+	static event_t aio_dummy_event;
+	state.aio_dummy_event = &aio_dummy_event;
 
 	ret = io_setup(MAX_AIO_EVENTS, &state.aio_ctx);
 	if (ret < 0) fail2(1, -ret, "io_setup");
@@ -359,6 +372,7 @@ void setup_main_loop(void)
 	ret = epoll_ctler(EPOLL_CTL_ADD, state.aio_eventfd,
 	                  EPOLLIN, state.aio_dummy_event);
 	if (ret < 0) fail(1, "epoll_ctl eventfd");
+#endif
 }
 
 /* fail:  prints out the process name, and an error message,
