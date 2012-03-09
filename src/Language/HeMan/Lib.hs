@@ -26,6 +26,8 @@ socket domain typ protcol =
 
 set_sock_reuse :: FdE -> Prog IntE
 set_sock_reuse fd = call (CFn "set_sock_reuse") Int (fd)
+set_sock_cork :: FdE -> Prog IntE
+set_sock_cork fd = call (CFn "set_sock_cork") Int (fd)
 
 make_nb :: FdE -> Prog ()
 make_nb fd = call' (CFn "make_socket_non_blocking") (fd)

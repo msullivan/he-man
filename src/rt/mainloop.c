@@ -26,7 +26,7 @@
 #define MAX_EVENTS 10
 #define MAX_AIO_EVENTS 100 // dunno what this should be...
 #define MAX_ITERS 50
-#define MAX_THREADS 4
+#define MAX_THREADS 1
 
 int thread_count = MAX_THREADS;
 
@@ -282,7 +282,7 @@ static void do_poll(bool can_sleep)
 		handle_aio_event(&aio_events[i]);
 	}
 #else
-#define expect_aio 1
+#define expect_aio 0
 #endif
 
 	// If we aren't expecting aio, block indefinitely, otherwise
