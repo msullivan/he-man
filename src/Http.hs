@@ -4,7 +4,7 @@ import Language.HeMan
 
 q_limit = 1024
 port = 8080
-bufsize = 4096*4
+bufsize = 511
 
 http_parse :: BufferE -> IntE -> Prog IntE
 http_parse buf len =
