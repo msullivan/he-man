@@ -47,11 +47,11 @@ def produce_stats(data):
     return data
 
 def graph(size, table):
-
-    g = Gnuplot.Gnuplot(debug=1)
-    g.title(size)
+    g = Gnuplot.Gnuplot(debug=0)
+    #g.title(size)
     g('set style data errorlines')
     g('set yrange [0:]')
+    g('set xrange [0:525]') # XXX: change if we change max conns
     g.xlabel('# of Concurrent requests')
     g.ylabel('Requests/second')
 
@@ -59,9 +59,9 @@ def graph(size, table):
     for server, data in table.items():
         xs, ys, stds = zip(*data)
         lines.append(Gnuplot.Data(xs, ys, stds, title=server))
-    g.replot(*lines)
+    g.itemlist = lines
 
-    raw_input('Please press return to continue...\n')
+    g.hardcopy('graph_' + size + '.ps', enhanced=1, color=1)
 
 
 def main(args):
@@ -71,8 +71,8 @@ def main(args):
     sizes = set(x[1] for x in data)
 
     tables = {size: organize_data(data, size) for size in sizes}
-    size = '16K'
-    graph(size, tables[size])
+    for size, table in tables.items():
+        graph(size, table)
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv))

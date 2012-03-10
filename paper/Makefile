@@ -2,8 +2,17 @@
 
 all: paper.pdf
 
-%.pdf: %.tex citations.bib
+%.pdf: %.tex citations.bib graph_100.pdf graph_16K.pdf graph_128K.pdf
 	pdflatex $< && bibtex $* && pdflatex $< && pdflatex $< 
+
+graph_100.ps: ../benchmarking/graph.py ../benchmarking/data/*
+	../benchmarking/graph.py ../benchmarking/data/*
+# Running the script produces all three graphs
+graph_16K.ps: graph_100.ps
+graph_128K.ps: graph_100.ps
+
+%.pdf: %.ps
+	ps2pdf $<
 
 clean:
 	-rm -f *.aux *.log *.bbl *.blg *.out
