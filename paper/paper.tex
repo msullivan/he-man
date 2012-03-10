@@ -29,8 +29,6 @@
   {\lstset{frame=}}
   {}
 
-
-
 \newenvironment{smallverbatim}{\endgraf\small\verbatim}{\endverbatim} 
 \renewcommand{\t}{\texttt}
 \renewcommand{\b}{\textbf}
@@ -58,18 +56,47 @@
 % TODO: talk about type system, runtime improvements, optimizations
 
 \begin{abstract}
-% XXX: better abstract;
-% and where should we put the code link?
+The event-driven model is the gold standard for highly concurrent network
+application programming; while threaded code is easier to write and reason
+about, it is considerably less scalable.
 
-We present He-Man \cite{HeMan}, a compiled, embedded, domain specific language in Haskell for
-building scalable network applications in a natural, straight-line manner while
-still producing efficient event loop-based code. He-Man programs are compact and
-measurements indicate that it performs acceptably. Our implementation is
-available at
+We observe that these paradigms are not only interchangeable, but primarily
+confined to an application's core control flow; we propose a hybrid model in
+which programmers express this core logic at a high level of abstraction, yet
+are free to implement the remainder of the application at a low level.
+
+This paper describes the design and Haskell implementation of He-Man, a domain
+specific language for network application programming which presents a
+sequential thread-like abstraction, but compiles to performant event-driven C
+code. Our implementation is available at
 \url{https://github.com/msullivan/he-man}.
+%\cite{HeMan}
 \end{abstract}
 
 \section{Introduction}
+building scalable concurrent network applications. The
+language presents a 
+
+presents difficult concurrency challenges 
+implementation challenge to developers
+supporting many simultaneous clients
+although memory and bandwidth is plentiful
+difficult to design applications
+to take full advantage of these resources.
+threads inefficient (scheduling)
+event loops (hard to write)
+
+\cite{LauerNeedham}, 
+
+in a natural, straight-line manner while
+still producing efficient event loop-based code. 
+
+He-Man programs are compact and
+measurements indicate that it performs acceptably. Our implementation is
+available at
+, embedded, domain specific language in Haskell for
+building 
+
 
 Network applications need to support many simultaneous clients---this is known
 as the C10K (``10,000 client'') problem \cite{Kegel}. Modern servers have enough
@@ -120,6 +147,8 @@ in Haskell, and also allows calls to foreign C functions; it outputs C code
 which links with an event loop runtime and any code a programmer might prefer to
 write directly in C. Our vision is that C programmers can use He-Man for their
 core application logic, and can write the rest of their application in C. 
+
+\cite{*}
 
 % Contributions; probably should be elsewhere
 We identify our contributions as:
@@ -776,6 +805,7 @@ caching layer) in C while writing the network logic in
 straightforward, straight-line He-Man code.
 
 
+\pagebreak
 \bibliography{citations}{}
 \bibliographystyle{abbrvnat}
 
