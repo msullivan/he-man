@@ -43,10 +43,6 @@ parse_request buf ev = do
     parse_result .=. http_parse buf request_size
   return parse_result
 
-sendfile :: FdE -> FdE -> IntE -> Prog IntE
-sendfile out_fd in_fd len =
-  callName "amt_written" (CFn "sendfile") Int (out_fd, in_fd, num 0, len)
-
 full_sendfile (out_fd, e) in_fd size = do
   amt_written <- var "total_written" Int 0
   failed <- var "write_failed" Int 0

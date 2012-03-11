@@ -642,7 +642,7 @@ being split into states and the need to explicitly handle read and
 write returning \t{EAGAIN} and write returning short. The state
 machine has a total of five states. The He-Man version is 33 lines
 long and is a very clear representation of the control flow of each
-individual thread. (Additionally, the He-Man library has 17 lines of
+individual thread. (Additionally, the He-Man library has 25 lines of
 code implementing generic routines for simulating blocking IO using
 nonblocking IO and wait.) The total line counts, however, somewhat
 understate the difference between the versions, since the boilerplate
@@ -653,56 +653,85 @@ apparent: the C version is 38 lines of code, and the He-Man version is
 
 The generated code is substantially less tight than the C version,
 although it is unlikely to be any slower in practice. It has 10 states
-and is 240 lines of C.
-%This could be reduced substantially by allowing
-%conditionals outside of block tail position.
+and is 240 lines of C. The echo server was able to handle 10,000
+concurrent, occasionally transmitting, connections with no
+problem. With 10,000 clients connected the echo server used about 40
+MB of memory, which is almost entirely accounted for 4 KB buffer that
+each connection maintained for I/O.
 
 \subsection{HTTP Server}
 
 To test the suitability of our system for more complicated programs
 and to demonstrate separating network logic and application logic, we
-built a simple (and bad) HTTP 1.0 server. The network logic is written
-in He-Man and request parsing is written in C. The C side is
-implemented as a function that takes a buffer and returns whether it
-forms a complete HTTP request and, if so, fills a buffer with the
-file name to serve. The entire server is 54 lines of He-Man Haskell and
-27 lines of C. It suffers from a number of major deficiencies, but is
-complete enough to benchmark.
+built a very simple HTTP server. The network logic is written in
+He-Man and request parsing and response header building is written in
+C. The C request parsing is implemented as a function that takes a
+buffer and returns whether it forms a complete HTTP request and, if
+so, fills a buffer with the file name to serve. The entire server is
+68 lines of He-Man Haskell and 39 lines of C. It suffers from a number
+of major deficiencies, but is complete enough to benchmark. To make
+sure that it does not get away with sending less data than the servers
+it is being compared against, it sends some ``padding'' headers with
+useless data.
 
-Our benchmark measurements are taken using ab, the Apache HTTP server
-benchmarking tool \cite{ApacheAB}. Measurements were collected by
-having a variable number of client threads request a file 100 times;
-the experiment was repeated with a 16 kilobyte file and a 128 kilobyte
-file. We ran the tests against both our He-Man HTTP server and Apache
-2.2.20, installed with the default Ubuntu 11.10 settings, except for
-client, thread, and process limits being adjusted upwards. Since the
-He-Man runtime is currently only single-threaded, we ran the Apache
-web server pinned to a single processor. Since the test repeatedly
-requests the same file, it will always be in the kernel's disk cache,
-and thus this test is not disk bound.
+Our benchmark measurements are taken using weighttp, an http
+benchmarking tool associated with lighttpd
+\cite{weighttp}. Measurements were collected by requesting a file many
+times with a variable number of concurrent connections; the experiment
+was repeated with a 100 byte file (80000 requests), a 16 kilobyte file
+(30000 requests), and a 128 kilobyte file (8000 requests).
+weighttp was run with 4 threads making requests.
+Since the test repeatedly requests the same file, it should always be in
+the kernel's disk cache.
 
-For our experiments, the server ran Linux kernel 3.0.0 on a Lenovo
-Thinkpad W520 with a quad core 2.3 GHz Intel Core i7-2820QM and 8
-gigabytes of RAM, and the client ran on a Lenovo Thinkpad T500 with a
-Intel Core 2 Duo and 8 gigabytes of RAM.  % XXX: client specs
-The machines were connected by a gigabit Ethernet link.
-Unfortunately, ab is not particularly scalable, so we had trouble
-testing with more than 500 clients.
+For our experiments, both the client and server ran Linux kernel
+2.6.32 on quad core 3.1 GHz Intel Core i5-2400 processors with 8
+gigabytes of RAM. The machines were connected over a 100 megabit
+Ethernet network.
+We ran the tests against our He-Man HTTP server, Apache 2.2.14 (installed
+with the default Ubuntu 10.04 LTS settings, except for client, thread,
+and process limits being adjusted upwards) and Lighttpd 1.4.26
+(installed with the default Ubuntu 10.04 LTS settings).
 
-Figure \ref{fig:graph128} compares our server to Apache for a 128 KB
-file. Our server performs nearly identically to Apache on this load.
-Figure \ref{fig:graph16} compares our server to Apache for a 16 KB
-file. In this scenario, we substantially outperform Apache. We
-conjecture this is because with a smaller file size, overhead for
-connection setup begins to dominate, and connection setup in He-Man
-consists of a few memory allocations whereas connection setup under
-Apache may require spawning new OS level threads.
+Each trial was run 10 times; the plots show the arithmetic mean of the
+number of requests per second the servers handled; error bars show the
+standard deviation.
+
+Figure \ref{fig:graph100} compares the three servers while serving a
+very small (100 byte) file. Measurements with small files test the
+overhead of the web server more clearly than measurements with large
+files, which wind up testing how efficiently the kernel can transfer
+data. In this test, He-Man outperforms Apache and lighttpd across all
+of our measurements. This can be attributed to factors both in He-Man
+and in our server. He-Man imposes very low overhead and very low
+connection creation cost, which makes it easy to quickly handle many
+new connections. Our server is also much less featureful that Apache
+and lighttpd, which means it needs to do less. It is difficult to
+separate out these factors.
+
+Figure \ref{fig:graph128} and Figure \ref{fig:graph16} compares our
+server to Apache and lighttpd for 128 KB and 16 KB files. On these
+loads, our server performs nearly identically to Apache while being
+outperformed by the highly-turned lighttpd. In these tests, both
+Apache and He-Man begin to handle fewer requests per second above some
+number of concurrent requests (about 400 for the 16 KB file and 300
+for the 128 KB file). We investigated the He-Man httpd server's
+behavior in these tests, and found that the measured slowdown in
+requests/second occured when, after rapidly processing most of the
+requests in a test batch, a few requests would spend a very long time
+waiting to connect, causing a pause at the end of the run. During
+these pauses, both the client and the server were blocked in the
+kernel, waiting for network events. This strongly suggests to us that
+the problem is not with the He-Man compilation phase but that our web
+server would benefit from more careful tuning of network interactions
+(which may require improvements to the runtime).
+
 
 \begin{figure*}[!ht]
 \centering
-\includegraphics[width=0.9\textwidth]{graph_128K.pdf}
-\caption{Web server benchmark, 128 KB file.}
-\label{fig:graph128}
+\includegraphics[width=0.9\textwidth]{graph_100.pdf}
+\caption{Web server benchmark, 100 byte file.}
+\label{fig:graph100}
 \end{figure*}
 \begin{figure*}[!ht]
 \centering
@@ -712,9 +741,9 @@ Apache may require spawning new OS level threads.
 \end{figure*}
 \begin{figure*}[!ht]
 \centering
-\includegraphics[width=0.9\textwidth]{graph_100.pdf}
-\caption{Web server benchmark, 100 B file.}
-\label{fig:graph100}
+\includegraphics[width=0.9\textwidth]{graph_128K.pdf}
+\caption{Web server benchmark, 128 KB file.}
+\label{fig:graph128}
 \end{figure*}
 
 \subsection{Memory Overhead}
@@ -814,12 +843,18 @@ avoid the state machine paradigm.
 %% XXX: needs serious work
 \section{Future work}
 
-We also plan to expand the language with the ability to declare functions and
-make non-external function calls within a thread. This will make code simpler
-and shorter by allowing the programmer to abstract away common functionality
-like read and write loops.
+XXX: I'm not really sure what we want to put here. I think maybe we
+shouldn't have a future work section. If we just want to talk about
+the deficencies of the thing we built, that should go somewhere else,
+maybe? It isn't really clear we have obvious future research
+directions to talk about.
 
-In the runtime, our current thread \t{struct}s are larger than necessary.
+We also plan to expand the language with the ability to declare
+functions and make non-external function calls within a thread. This
+will make the generated code smaller by allowing the programmer to
+abstract away common functionality like read and write loops.
+
+The runtime could be much more carefully tuned.
 Because the runtime allocates a \t{struct} on every thread spawn, we should
 replace our \t{malloc} calls with calls to a custom slab allocator.
 
