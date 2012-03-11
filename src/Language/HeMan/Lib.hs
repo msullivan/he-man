@@ -52,6 +52,11 @@ sock_write :: FdE -> BufferE -> IntE -> Prog IntE
 sock_write fd buf len =
   callName "amt_written" (CFn "write") Int (fd, buf, len)
 
+
+sendfile :: FdE -> FdE -> IntE -> Prog IntE
+sendfile out_fd in_fd len =
+  callName "amt_written" (CFn "sendfile") Int (out_fd, in_fd, num 0, len)
+
 close :: FdE -> Prog IntE
 close fd =
   call (CFn "close") Int (fd)
