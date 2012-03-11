@@ -35,13 +35,11 @@
 \def\pp#1{& & #1 \cr}
 \def\a#1{& $\mid$ & #1 \cr}
 
-% XXX: standardize on IO vs I/O
-% XXX: standardize on continuation-passing vs continuation passing
-% XXX: standardize on domain-specific vs domain specific
-% TODO: talk about type system, runtime improvements, optimizations
+%There exist C/C++ libraries for event loops\cite{libevent}, but none of these
+%avoid the state machine paradigm.
 
 %XXX: new title?
-\title{He-Man: A domain specific language for lightweight concurrency}
+\title{He-Man: A domain-specific language for lightweight concurrency}
 %\subtitle{I said hey, what's goin' on}
 \authorinfo{Carlo Angiuli}{Carnegie Mellon University}{cangiuli@cs.cmu.edu}
 \authorinfo{Michael Sullivan}{Carnegie Mellon University}{mjsulliv@cs.cmu.edu}
@@ -58,8 +56,8 @@ flow; we propose a hybrid model in which programmers express this core logic at
 a high level of abstraction, yet are free to implement the remainder of the
 application at a low level.
 
-This paper describes the design and Haskell implementation of He-Man, a domain
-specific language for network application programming which presents a
+This paper describes the design and Haskell implementation of He-Man, a
+domain-specific language for network application programming which presents a
 sequential thread-like abstraction, but compiles to performant event-driven C
 code. Our implementation is available at
 \url{https://github.com/msullivan/he-man}. %\cite{HeMan}
@@ -103,7 +101,7 @@ is not new, and has been used to great effect in functional language runtimes
 like GHC \cite{MarlowEtAl}. Li and Zdancewic \cite{LiZdancewic} have developed
 monadic abstractions in Haskell for threaded and event-driven concurrency, for
 the same problem domain of scalable network applications; their implementation
-draws upon the concurrency and synchronization support in the GHC runtime.
+draws upon concurrency and synchronization support in the GHC runtime.
 
 We observe that, although concurrency is critical to network applications
 because I/O dominates computation time, core I/O routines comprise a small
@@ -116,7 +114,7 @@ Haskell and making liberal use of the FFI.
 Our contribution is to distill the Lauer-Needham duality to its essence, by
 compiling from a simple thread abstraction to self-contained event-driven C
 code. This abstraction, He-Man: Haskell Event Manager, Apropos Networking, is a
-compiled domain specific language embedded in Haskell, which offers a small
+compiled domain-specific language embedded in Haskell, which offers a small
 monadic language supporting thread spawning, blocking events, and external
 function calls.
 
@@ -188,7 +186,9 @@ list of arguments and launches the associated code with those
 arguments available to it, and \b{Wait}, which takes an event
 expression as an argument and blocks until the event is
 ``ready''. Note that \b{Call} is for calling foreign functions; He-Man
-does not have its own notion of function.
+does not have its own notion of function.\footnote{Adding functions or
+observable sharing to He-Man could reduce output code size, but would have
+little impact on performance.}
 
 Since writing programs using the abstract syntax would be highly
 inconvenient, we provide a monadic library for writing He-Man
@@ -376,7 +376,7 @@ typ2 f (E e1) (E e2) = E (f e1 e2)
 var :: String -> Type a -> Expr a -> Prog (Expr a)
 var = ...
 \end{code}
-\caption{He-Man expression typing} % XXX
+\caption{Implementation of He-Man type system.}
 \label{fig:types}
 \end{figure}
 
@@ -437,7 +437,7 @@ call :: ArgPacket exps tys =>
 call = ...
 
 \end{code}
-\caption{He-Man argument packets} % XXX
+\caption{Implementation of He-Man \t{ArgPacket}s.}
 \label{fig:arg-packets}
 \end{figure}
 
@@ -477,7 +477,8 @@ machine of code blocks. This occurs in our \t{flattenPrgm} pass, which passes
 through program \i{Stmt}s in reverse order, generating uniquely-named blocks
 whose only control-flow consists of (non-nested) tail-position jumps to other
 blocks. Threads are identified with their first block.
-% TODO discuss the transformations
+
+TODO here we will discuss the transformations that occur
 
 %As an illustrative example, consider encountering an \b{If} statement in our
 %backwards pass, where we have access to the translation of the later
@@ -520,8 +521,7 @@ further optimized by a C compiler, and execution time is dominated by I/O, not
 computation. However, simple constant folding eliminates many \t{if} statements
 %TODO examples, justification
 
-Once our 
-% TODO fuseBlocks pass
+TODO here we discuss the fuseBlocks pass
 
 At this point, many blocks refer to variables declared in other blocks. The
 \t{collectFrees} pass traverses each block, collecting the variables each thread
@@ -588,8 +588,8 @@ events.
 
 Currently, the He-Man runtime provides support for two types of
 events: socket/pipe file I/O and asynchronous He-Man channels.  The
-runtime has partial support for Linux Kernel Asynchronous IO for file
-IO, using a Linux \t{eventfd} to allow \t{epoll} to wait on AIO
+runtime has partial support for Linux Kernel Asynchronous I/O for file
+I/O, using a Linux \t{eventfd} to allow \t{epoll} to wait on asynchronous I/O
 events. Adding new types of events that an application requires would
 be simple, but require some runtime hacking.
 
@@ -618,8 +618,8 @@ machine has a total of five states.
 
 The He-Man version is 33 lines long and clearly represents the control flow of
 each individual thread. (This does not include the He-Man library, which has 25
-lines of code implementing generic routines for simulating blocking IO using
-nonblocking IO and wait.) The total line counts, somewhat understate the
+lines of code implementing generic routines for simulating blocking I/O using
+nonblocking I/O and wait.) The total line counts, somewhat understate the
 difference between the versions, since the boilerplate for setting up
 connections is about the same for both versions. When just looking at the core
 read/write loop, the difference is much more apparent: the C version is 38 lines
@@ -694,19 +694,19 @@ the problem is not with the He-Man compilation phase but that our web
 server would benefit from more careful tuning of network interactions
 (which may require improvements to the runtime).
 
-\begin{figure*}[!ht]
+\begin{figure*}[htbp]
 \centering
 \includegraphics[width=0.9\textwidth]{graph_100.pdf}
 \caption{Web server benchmark, 100 byte file.}
 \label{fig:graph100}
 \end{figure*}
-\begin{figure*}[!ht]
+\begin{figure*}[htbp]
 \centering
 \includegraphics[width=0.9\textwidth]{graph_16K.pdf}
 \caption{Web server benchmark, 16 KB file.}
 \label{fig:graph16}
 \end{figure*}
-\begin{figure*}[!ht]
+\begin{figure*}[htbp]
 \centering
 \includegraphics[width=0.9\textwidth]{graph_128K.pdf}
 \caption{Web server benchmark, 128 KB file.}
@@ -757,95 +757,50 @@ synchronization protocol. The GHC Haskell runtime supports concurrency
 primitives \cite{LiEtAl} by scheduling lightweight threads onto a small number
 of kernel threads \cite{MarlowEtAl}.
 
-% XXX: remains unnecessarily general for us?
+Li and Zdancewic \cite{LiZdancewic} have developed a hybrid concurrency monad in
+Haskell for building scalable network applications. Their implementation uses
+the CPS monad to represent computations as continuations in a ready queue, and
+gives the illusion that I/O is blocking in each thread, while it is actually
+handled with foreign calls to \t{epoll}. This concurrency monad is executed in
+Haskell, unlike He-Man programs, which are compiled for speed and portability
+\cite{ElliottEtAl}.
 
-He-Man is most similar to Li and Zdancewic's Haskell implementation of
-a hybrid event/thread programming model for network applications
-\cite{LiZdancewic}.  Their project has similar goals to ours, but is
-implemented entirely within Haskell. As a result, unlike He-Man, their
-framework requires entire applications to be written in Haskell, and
-incurs runtime overhead from the Haskell system.
+\subsection{Functional network programming}
 
-While He-Man's goals are similar to
-those of several other systems, we feel that it solves 
+In addition to the concurrency models mentioned above, a number of functional
+languages have network libraries specifically tailored to concurrency issues,
+like Erlang's TCP/IP suite \cite{ParisEtAl}, and the FoxNet library for Standard
+ML \cite{BiagioniEtAl}, which uses continuations to implement coroutines for
+cooperative multithreading.
 
-\subsection{Lightweight threads}
+It is important to note that in environments providing cooperative
+multithreading, like Capriccio, FoxNet, and He-Man, while the runtime guarantees
+that no thread monopolizes execution while waiting for I/O, it is certainly
+possible for one thread to monopolize execution by running indefinitely.
+Bounding execution time is a difficult problem which has been studied in the
+context of grid computing \cite{VanderwaartCrary}. The He-Man compiler
+guarantees that no code block contains an infinite loop; unbounded execution can
+only occur in calls to external functions.
 
-% Related work:
-%\cite{VanderwaartCrary} re bounded time
-%\cite{vonBehrenConditBrewer} re cooperative multithreading
-%\cite{LiZdancewic}
+The Scheme community often uses continuations to develop web applications which
+robustly handle client state despite the statelessness of HTTP. This can be
+accomplished either by CPSing a direct-style program \cite{GraunkeEtAl} or by
+modifying a HTTP server to explicitly store continuations \cite{Queinnec}.
 
-% Haskell EDSLs:
-%\cite{Gill}
-%\cite{ElliottEtAl} CITE THIS
-%\cite{LeijenMeijer}
+\section{Conclusion}
 
-% Functional programming:
-\cite{Vinoski}
-\cite{Hellstrom}
-FoxNet for Standard ML \cite{BiagioniEtAl}
-\cite{GraunkeEtAl}
-\cite{Queinnec}
+The Lauer-Needham duality suggests that the performance of event-driven
+concurrent code should be achievable with simpler threaded semantics. We propose
+a model of network application programming which completely separates I/O logic,
+which requires a tuned concurrent implementation, from largely single-threaded
+protocol and implementation details. 
 
-The C10K problem is particularly evident in the context of HTTP
-servers, which routinely maintain many concurrent connections. As we
-discussed in Section \ref{sec:evaluation}, Apache does not scale
-particularly well. The popular Lighttpd and Nginx HTTP server projects
-were both started with the explicit goal of outperforming Apache with
-respect to the C10K problem \cite{Lighttpd,Nginx}, and both use
-event-based architectures similar to He-Man.
-
-%A number of custom network stack implementations exist for functional
-%languages, such as FoxNet for Standard ML \cite{BiagioniEtAl}, and
-
-There exist C/C++ libraries for event loops\cite{libevent}, but none of these
-avoid the state machine paradigm.
-
-%% XXX: needs serious work
-\section{Future work}
-
-We also plan to expand the language with the ability to declare
-functions and make non-external function calls within a thread. This
-will make the generated code smaller by allowing the programmer to
-abstract away common functionality like read and write loops.
-
-The runtime could be much more carefully tuned.
-Because the runtime allocates a \t{struct} on every thread spawn, we should
-replace our \t{malloc} calls with calls to a custom slab allocator.
-
-We also hope to implement observable sharing, as in \cite{Gill}, to allow the
-same thread to have distinct spawn sites without code duplication. This does not
-add inefficiency, but does increase the size of our output code. 
-
-\section{Conclusions}
-Expressing network application logic as a compiled, embedded, domain
-specific language is an elegant and practical way to build scalable
-network applications without having to manually write state-machine
-based event-loop code. Embedding the language in Haskell allows
-powerful metaprogramming and allowed the language to be developed with
-a fraction of the effort of building a full language. Compiling to C
-allows C programmers to write parts of their system (for example, the
-caching layer) in C while writing the network logic in
-straightforward, straight-line He-Man code.
-
-% XXX
-
-We identify our contributions as:
-* We present the idea of generating code for network facing logic from a
-description written in a DSL while building the rest of the application in
-C. In a way, the DSL could be considered as a method for programmatically
-generating event driven frameworks customized for the application.
-* We observe that converting a traditional block-structured imperative
-program to a form amenable for use in an event-driven system is analogous
-to CPS conversion and thus easily done automatically. (Is this actually a
-contribution, or is it obvious and been said a million times before?)
-* We present a case study of compiled embedded domain specific language
-design and implementation
-* We demonstrate that it is practical to build efficient network
-applications using our system
-
-\cite{*}
+We present He-Man, a domain-specific language for expressing network application
+I/O in a straightforward threaded abstraction, which compiles to efficient
+event-driven C code. We demonstrate that it is practical to build efficient
+network applications with a combination of He-Man and C code, and unlike other
+hybrid concurrency systems, the He-Man runtime is very compact and easily
+modified.
 
 \bibliography{citations}{}
 \bibliographystyle{abbrvnat}
