@@ -734,19 +734,8 @@ megabytes.
 
 % Related work:
 %\cite{VanderwaartCrary} re bounded time
-%\cite{vonBehrenEtAl} re Capriccio
 %\cite{vonBehrenConditBrewer} re cooperative multithreading
 %\cite{LiZdancewic}
-%\cite{LauerNeedham} also intro
-%\cite{MarlowEtAl} also intro
-
-% Functional programming:
-%\cite{Vinoski}
-%\cite{Hellstrom}
-%\cite{BiagioniEtAl}
-%\cite{LiEtAl}
-%\cite{GraunkeEtAl}
-%\cite{Queinnec}
 
 % Haskell EDSLs:
 %\cite{Gill}
@@ -754,6 +743,59 @@ megabytes.
 %\cite{LeijenMeijer}
 
 \section{Related work}
+
+\subsection{Hybrid concurrency models}
+
+The Lauer-Needham duality \cite{LauerNeedham} between threaded and event-driven
+concurrency has given rise to a number of programming models attempting to
+bridge the gap between these abstractions. 
+
+Capriccio \cite{vonBehrenEtAl} is a user-level threading library which
+implements cooperative (non-preemptive) multithreading, and replaces blocking
+I/O primitives in \t{libc} with a wrapper for non-blocking I/O. Capriccio allows
+programmers to write C code in a threaded style, and performs a compiler
+analysis to statically allocate per-thread stack space. Capriccio's goals are
+similar to ours, but we feel that He-Man's approach of compiling to source is
+more portable and much simpler.
+
+Flux \cite{BurnsEtAl} is a domain-specific language intended, like He-Man, to
+handle concurrency in network applications separately from the rest of the
+application's logic. Flux allows programmers to declaratively specify how data
+flows through the server's components, and compiles to a threaded or
+event-driven runtime which implements this behavior concurrently. Flux source
+code cannot express loops, except for an implicit outermost loop, as a way of
+preventing deadlocks; He-Man allows more expressive control flow while making
+the same guarantee.
+
+Many functional programming languages present a native lightweight thread
+abstraction. Erlang \cite{VirdingEtAl} was designed for highly concurrent
+telecommunications applications, and easily scales to 20,000 clients
+\cite{Hellstrom}. Concurrent ML \cite{ReppyEtAl} adds concurrency primitives to
+Standard ML, implemented with front-end continuations, and a back-end
+synchronization protocol. The GHC Haskell runtime supports concurrency
+primitives \cite{LiEtAl} by scheduling lightweight threads onto a small number
+of kernel threads \cite{MarlowEtAl}.
+
+% XXX: remains unnecessarily general for us?
+
+He-Man is most similar to Li and Zdancewic's Haskell implementation of
+a hybrid event/thread programming model for network applications
+\cite{LiZdancewic}.  Their project has similar goals to ours, but is
+implemented entirely within Haskell. As a result, unlike He-Man, their
+framework requires entire applications to be written in Haskell, and
+incurs runtime overhead from the Haskell system.
+
+While He-Man's goals are similar to
+those of several other systems, we feel that it solves 
+
+\subsection{Lightweight threads}
+
+% Functional programming:
+\cite{Vinoski}
+\cite{Hellstrom}
+FoxNet for Standard ML \cite{BiagioniEtAl}
+\cite{GraunkeEtAl}
+\cite{Queinnec}
 
 The C10K problem is particularly evident in the context of HTTP
 servers, which routinely maintain many concurrent connections. As we
@@ -763,29 +805,8 @@ were both started with the explicit goal of outperforming Apache with
 respect to the C10K problem \cite{Lighttpd,Nginx}, and both use
 event-based architectures similar to He-Man.
 
-A number of functional languages support lightweight threads with
-user-space scheduling, most notably Erlang, which was designed for
-highly concurrent telecommunications applications, and easily scales
-to 20,000 clients \cite{Hellstrom}. The Haskell runtime supports a
-variety of concurrency primitives which permit a lightweight threaded
-programming model \cite{LiEtAl}.
-
 %A number of custom network stack implementations exist for functional
 %languages, such as FoxNet for Standard ML \cite{BiagioniEtAl}, and
-
-He-Man is most similar to Li and Zdancewic's Haskell implementation of
-a hybrid event/thread programming model for network applications
-\cite{LiZdancewic}.  Their project has similar goals to ours, but is
-implemented entirely within Haskell. As a result, unlike He-Man, their
-framework requires entire applications to be written in Haskell, and
-incurs runtime overhead from the Haskell system.
-
-% XXX taken from old intro
-
-Languages like Erlang and Haskell provide lightweight threads via user-space
-schedulers. This affords even better performance, but remains unnecessarily
-powerful for this problem space, imposing runtime overhead on applications which
-don't require preemptable, independently scheduled threads \cite{Vinoski}.
 
 There exist C/C++ libraries for event loops\cite{libevent}, but none of these
 avoid the state machine paradigm.
