@@ -4,7 +4,7 @@ RUNTIME_OBJ=rt/mainloop.o rt/lib.o
 MT_RUNTIME_OBJ=rt/mainloop_mt.o rt/lib.o
 HEADERS=rt/mainloop.h rt/lib.h rt/variable_queue.h
 
-all: rt/echod rt/httpd rt/echod2
+all: rt/echod rt/httpd rt/httpd_mt rt/echod2
 
 .PHONY: all clean reallyclean
 
@@ -38,8 +38,11 @@ rt/echo2.c: Echo2.hs ${HEMAN_OBJ}
 
 # HTTP server
 
-rt/httpd: rt/http_lib.o rt/http.o ${MT_RUNTIME_OBJ}
-	${CC} ${CFLAGS} $^ -o $@ -laio -lpthread
+rt/httpd: rt/http_lib.o rt/http.o ${RUNTIME_OBJ}
+	${CC} ${CFLAGS} $^ -o $@
+
+rt/httpd_mt: rt/http_lib.o rt/http.o ${MT_RUNTIME_OBJ}
+	${CC} ${CFLAGS} $^ -o $@ -lpthread
 
 rt/echo.o: rt/echo.c ${HEADERS}
 rt/http.c: Http.hs ${HEMAN_OBJ}
