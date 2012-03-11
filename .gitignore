@@ -24,3 +24,5 @@ paper.out
 paper.pdf
 report.pdf
 tester
+graph_*.ps
+graph_*.pdf

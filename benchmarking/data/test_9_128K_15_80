@@ -1,0 +1,22 @@
+weighttp - a lightweight and simple webserver benchmarking tool
+
+starting benchmark...
+spawning thread #1: 4 concurrent requests, 2000 total requests
+spawning thread #2: 4 concurrent requests, 2000 total requests
+spawning thread #3: 4 concurrent requests, 2000 total requests
+spawning thread #4: 3 concurrent requests, 2000 total requests
+progress:  10% done
+progress:  20% done
+progress:  30% done
+progress:  40% done
+progress:  50% done
+progress:  60% done
+progress:  70% done
+progress:  80% done
+progress:  90% done
+progress: 100% done
+
+finished in 9 sec, 608 millisec and 928 microsec, 832 req/s, 106779 kbyte/s
+requests: 8000 total, 8000 started, 8000 done, 8000 succeeded, 0 failed, 0 errored
+status codes: 8000 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 1050664000 bytes total, 2088000 bytes http, 1048576000 bytes data
