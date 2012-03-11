@@ -822,12 +822,18 @@ avoid the state machine paradigm.
 %% XXX: needs serious work
 \section{Future work}
 
-We also plan to expand the language with the ability to declare functions and
-make non-external function calls within a thread. This will make code simpler
-and shorter by allowing the programmer to abstract away common functionality
-like read and write loops.
+XXX: I'm not really sure what we want to put here. I think maybe we
+shouldn't have a future work section. If we just want to talk about
+the deficencies of the thing we built, that should go somewhere else,
+maybe? It isn't really clear we have obvious future research
+directions to talk about.
 
-In the runtime, our current thread \t{struct}s are larger than necessary.
+We also plan to expand the language with the ability to declare
+functions and make non-external function calls within a thread. This
+will make the generated code smaller by allowing the programmer to
+abstract away common functionality like read and write loops.
+
+The runtime could be much more carefully tuned.
 Because the runtime allocates a \t{struct} on every thread spawn, we should
 replace our \t{malloc} calls with calls to a custom slab allocator.
 
