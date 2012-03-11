@@ -43,9 +43,11 @@
 \def\a#1{& $\mid$ & #1 \cr}
 
 % XXX: We need to cite ElliottEtAl somewhere!
+% XXX: standardize on IO vs I/O
+% XXX: standardize on domain-specific vs domain specific
 
 %XXX: new title?
-\title{He-Man: A domain-specific language for lightweight concurrency}
+\title{He-Man: A domain specific language for lightweight concurrency}
 %\subtitle{I said hey, what's goin' on}
 \authorinfo{Carlo Angiuli}{Carnegie Mellon University}{cangiuli@cs.cmu.edu}
 \authorinfo{Michael Sullivan}{Carnegie Mellon University}{mjsulliv@cs.cmu.edu}
@@ -58,112 +60,111 @@
 \begin{abstract}
 The event-driven model is the gold standard for highly concurrent network
 application programming; while threaded code is easier to write and reason
-about, it is considerably less scalable.
-
-We observe that these paradigms are not only interchangeable, but primarily
-confined to an application's core control flow; we propose a hybrid model in
-which programmers express this core logic at a high level of abstraction, yet
-are free to implement the remainder of the application at a low level.
+about, it is considerably less scalable. We observe that these paradigms are not
+only interchangeable, but primarily confined to an application's core control
+flow; we propose a hybrid model in which programmers express this core logic at
+a high level of abstraction, yet are free to implement the remainder of the
+application at a low level.
 
 This paper describes the design and Haskell implementation of He-Man, a domain
 specific language for network application programming which presents a
 sequential thread-like abstraction, but compiles to performant event-driven C
 code. Our implementation is available at
-\url{https://github.com/msullivan/he-man}.
-%\cite{HeMan}
+\url{https://github.com/msullivan/he-man}. %\cite{HeMan}
 \end{abstract}
 
+% Related work:
+%\cite{VanderwaartCrary} re bounded time
+%\cite{vonBehrenEtAl} re Capriccio
+%\cite{vonBehrenConditBrewer} re cooperative multithreading
+%\cite{LiZdancewic}
+%\cite{LauerNeedham} also intro
+%\cite{MarlowEtAl} also intro
+
+% Functional programming:
+%\cite{Vinoski}
+%\cite{Hellstrom}
+%\cite{BiagioniEtAl}
+%\cite{LiEtAl}
+%\cite{GraunkeEtAl}
+%\cite{Queinnec}
+
+% Haskell EDSLs:
+%\cite{Gill}
+%\cite{ElliottEtAl}
+%\cite{LeijenMeijer}
+
 \section{Introduction}
-building scalable concurrent network applications. The
-language presents a 
 
-presents difficult concurrency challenges 
-implementation challenge to developers
-supporting many simultaneous clients
-although memory and bandwidth is plentiful
-difficult to design applications
-to take full advantage of these resources.
-threads inefficient (scheduling)
-event loops (hard to write)
+Modern network servers, like HTTP, IRC, and multiplayer games, need to support
+many simultaneous, possibly idle, connections---this is known as the C10K
+(``10,000 client'') problem \cite{Kegel}. Because I/O latency is high,
+particularly over a network, our goal is to process ready clients while others
+are blocked on I/O. To achieve maximum throughput, such servers are usually
+written in low-level languages like C.
 
-\cite{LauerNeedham}, 
+The simplest way to achieve this concurrency is to use kernel threads, like the
+industry-standard Apache web server \cite{Apache}. These incur a fair amount of
+overhead, and do not allow control over scheduling; they waste time, for
+example, yielding to I/O blocked clients.
 
-in a natural, straight-line manner while
-still producing efficient event loop-based code. 
+More performant web servers, such as Nginx \cite{Nginx} and Lighttpd
+\cite{Lighttpd}, use non-blocking I/O routines, multiplexed at a single call
+site (the ``event loop''). This allows one thread to serve many clients,
+handling each only when its I/O has completed. This event-driven model requires
+the routines to explicitly yield to the event loop, forcing programmers to
+restructure their code as a state machine, save state across function
+boundaries, and implement a scheduler. 
 
-He-Man programs are compact and
-measurements indicate that it performs acceptably. Our implementation is
-available at
-, embedded, domain specific language in Haskell for
-building 
+Although the event-driven model is typically chosen by developers who wish to
+maximize performance (as with Nginx and Lighttpd), von Behren, Condit, and
+Brewer \cite{vonBehrenConditBrewer} argue that events are an unnatural
+abstraction for this problem domain, and that an appropriate threading library
+(in particular, without preemption) can achieve equivalent performance.
 
+In an oft-cited 1979 paper, Lauer and Needham \cite{LauerNeedham} argue that the
+threaded and event-driven models are dual, where the thread scheduler plays the
+role of an event loop. Then the translation from threads is simply trampolining
+continuation-passing-style, where, in this case, I/O operations must yield.
 
-Network applications need to support many simultaneous clients---this is known
-as the C10K (``10,000 client'') problem \cite{Kegel}. Modern servers have enough
-memory and bandwidth for massive concurrency, but it is difficult to design
-applications to take full advantage of these resources.
+The idea of implementing custom schedulers for lightweight thread abstractions
+is not new, and has been used to great effect in functional language runtimes
+like GHC \cite{MarlowEtAl}. Li and Zdancewic \cite{LiZdancewic} have developed
+monadic abstractions in Haskell for threaded and event-driven concurrency, for
+the same problem domain of scalable network applications; their implementation
+draws upon the concurrency and synchronization support in the GHC runtime.
 
-A server must maintain separate state for each connection, and often waits for
-network or disk I/O to complete before continuing to serve a particular client.
-The simplest solution is to maintain one thread per client, using blocking I/O
-within each thread. This incurs frequent and expensive context switches at the
-operating system level; because the threads have identical code and little
-private data, this approach is unnecessary and does not scale.
+We observe that, although concurrency is critical to network applications
+because I/O dominates computation time, core I/O routines comprise a small
+portion of an application's program logic, which is otherwise devoted to
+protocol implementation, caching, etc. We might expect that our concurrency
+abstractions can be similarly confined; however, the above solutions require
+writing the entire application in Haskell, or at least writing the core in
+Haskell and making liberal use of the FFI.
 
-An improvement is to write multithreaded code in which each thread serves
-multiple clients. This is the most popular approach, and is utilized in the
-Apache HTTP server \cite{Apache}.
+Our contribution is to distill the Lauer-Needham duality to its essence, by
+compiling from a simple thread abstraction to self-contained event-driven C
+code. Our language, He-Man: Haskell Event Manager, Apropos Networking, is a
+compiled domain specific language embedded in Haskell, which offers a small
+monadic language supporting thread spawning, blocking events, and external
+function calls.
 
-Languages like Erlang and Haskell provide lightweight threads via user-space
-schedulers. This affords even better performance, but remains unnecessarily
-powerful for this problem space, imposing runtime overhead on applications which
-don't require preemptable, independently scheduled threads \cite{Vinoski}.
+%XXX
 
-By far the leanest approach is to write an event loop around kernel facilities
-for multiplexed, non-blocking I/O, such as \t{select}, \t{poll}, \t{epoll}, or
-\t{kqueue}. In this model, all blocking occurs at a single call site in the
-code. The programmer is responsible for explicitly maintaining per-client state
-and invoking the appropriate client on each I/O event.
+The He-Man system consists of a compiler written in Haskell, and a lightweight
+runtime in C, which links with the compiler's output. Both are small and easily
+extensible. We target C because it is commonly used for network applications,
 
-This requires the entire application to be restructured as a state machine with
-explicit per-client control blocks, a model which is very difficult for
-programmers to reason about. There exist numerous C/C++ libraries for event
-loops, but none of these avoid the state machine paradigm.
+so it is trivial to link our 
 
-Our observation is that the event loop model is simply trampolining
-continuation-passing-style, % TODO citation
-which can be obtained by mechanical translation from the straight-line threaded
-code. This suggests it is possible to obtain the best of both worlds---a
-threaded programming model with the performance of event loops. 
-
-To that end, we present He-Man: Haskell Event Manager, Apropos Networking, an
-embedded domain-specific language (EDSL) hosted in Haskell, which provides a
-threaded abstraction for network application programming and compiles to a C
-event loop based around Linux's \t{epoll}.
-
-He-Man is a straightforward monadic language with built-in network primitives,
-offering a simple thread-per-client programming model. It is easily extensible
-in Haskell, and also allows calls to foreign C functions; it outputs C code
-which links with an event loop runtime and any code a programmer might prefer to
-write directly in C. Our vision is that C programmers can use He-Man for their
+any code a programmer might prefer to write directly in C. 
+Our vision is that C programmers can use He-Man for their
 core application logic, and can write the rest of their application in C. 
 
-\cite{*}
-
-% Contributions; probably should be elsewhere
-We identify our contributions as:
-\begin{enumerate}
-
-\item We present a case study of compiled embedded domain specific
-  language design and implementation.
-\end{enumerate}
+He-Man programs are compact and measurements indicate that it performs
+acceptably. 
 
 \section{The event loop model}
-%% XXX: it isn't really clear what's going on in this section; it
-%% doesn't /really/ talk about event loop stuff in general. It is
-%% talking about one possible way to write event based things (the way
-%% He-Man generates).
-
 Network applications require a very constrained form of
 concurrency. Because in most network applications, I/O (both network
 and disk) latency dominates the computation time, each client's thread
@@ -201,6 +202,8 @@ The event loop model is then, essentially, built around closure
 converted trampolining continuation passing style. These are well
 studied problems and can easily be done mechanically in the He-Man
 backend.
+
+\cite{*}
 
 \section{Implementation}
 
@@ -776,6 +779,15 @@ implemented entirely within Haskell. As a result, unlike He-Man, their
 framework requires entire applications to be written in Haskell, and
 incurs runtime overhead from the Haskell system.
 
+% XXX taken from old intro
+
+Languages like Erlang and Haskell provide lightweight threads via user-space
+schedulers. This affords even better performance, but remains unnecessarily
+powerful for this problem space, imposing runtime overhead on applications which
+don't require preemptable, independently scheduled threads \cite{Vinoski}.
+
+There exist C/C++ libraries for event loops\cite{libevent}, but none of these
+avoid the state machine paradigm.
 
 %% XXX: needs serious work
 \section{Future work}
@@ -804,8 +816,22 @@ allows C programmers to write parts of their system (for example, the
 caching layer) in C while writing the network logic in
 straightforward, straight-line He-Man code.
 
+% XXX
 
-\pagebreak
+We identify our contributions as:
+* We present the idea of generating code for network facing logic from a
+description written in a DSL while building the rest of the application in
+C. In a way, the DSL could be considered as a method for programmatically
+generating event driven frameworks customized for the application.
+* We observe that converting a traditional block-structured imperative
+program to a form amenable for use in an event-driven system is analogous
+to CPS conversion and thus easily done automatically. (Is this actually a
+contribution, or is it obvious and been said a million times before?)
+* We present a case study of compiled embedded domain specific language
+design and implementation
+* We demonstrate that it is practical to build efficient network
+applications using our system
+
 \bibliography{citations}{}
 \bibliographystyle{abbrvnat}
 
