@@ -54,6 +54,6 @@ int get_file_size(int fd)
 int http_make_hdr(char *buf, int len, int size)
 {
 	return snprintf(buf, len,
-	                "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: %d\r\n\r\n",
+	                "HTTP/1.1 200 OK\r\nConnection: close\r\nServer: Masters of the Universe\r\nContent-Length: %d\r\nX-Diqs: 8=============================================================================================================================================================================================D\r\n\r\n",
 	                size);
 }
