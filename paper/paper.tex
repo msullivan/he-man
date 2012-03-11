@@ -73,27 +73,6 @@ code. Our implementation is available at
 \url{https://github.com/msullivan/he-man}. %\cite{HeMan}
 \end{abstract}
 
-% Related work:
-%\cite{VanderwaartCrary} re bounded time
-%\cite{vonBehrenEtAl} re Capriccio
-%\cite{vonBehrenConditBrewer} re cooperative multithreading
-%\cite{LiZdancewic}
-%\cite{LauerNeedham} also intro
-%\cite{MarlowEtAl} also intro
-
-% Functional programming:
-%\cite{Vinoski}
-%\cite{Hellstrom}
-%\cite{BiagioniEtAl}
-%\cite{LiEtAl}
-%\cite{GraunkeEtAl}
-%\cite{Queinnec}
-
-% Haskell EDSLs:
-%\cite{Gill}
-%\cite{ElliottEtAl}
-%\cite{LeijenMeijer}
-
 \section{Introduction}
 
 Modern network servers, like HTTP, IRC, and multiplayer games, need to support
@@ -144,30 +123,28 @@ Haskell and making liberal use of the FFI.
 
 Our contribution is to distill the Lauer-Needham duality to its essence, by
 compiling from a simple thread abstraction to self-contained event-driven C
-code. Our language, He-Man: Haskell Event Manager, Apropos Networking, is a
+code. This abstraction, He-Man: Haskell Event Manager, Apropos Networking, is a
 compiled domain specific language embedded in Haskell, which offers a small
 monadic language supporting thread spawning, blocking events, and external
 function calls.
 
-%XXX
-
 The He-Man system consists of a compiler written in Haskell, and a lightweight
-runtime in C, which links with the compiler's output. Both are small and easily
-extensible. We target C because it is commonly used for network applications,
+runtime in C which links with the compiled code. He-Man allows programmers to
+develop scalable network applications by expressing their I/O logic in He-Man,
+and linking the resulting event loop to the rest of their application, which can
+be written in C or any language which interfaces with C. We target C because it
+is commonly used in this domain, and well-suited to performance-critical
+applications.
 
-so it is trivial to link our 
+In the remainder of the paper, we discuss the event-driven programming model,
+our implementation of the He-Man system, and verify that its performance is
+competitive with handwritten event loops.
 
-any code a programmer might prefer to write directly in C. 
-Our vision is that C programmers can use He-Man for their
-core application logic, and can write the rest of their application in C. 
+\section{The event-driven model}
 
-He-Man programs are compact and measurements indicate that it performs
-acceptably. 
-
-\section{The event loop model}
 Network applications require a very constrained form of
-concurrency. Because in most network applications, I/O (both network
-and disk) latency dominates the computation time, each client's thread
+concurrency. In most network applications, I/O (both network
+and disk) latency dominates computation time, so each client's thread
 of execution spends most of its time waiting on I/O. In particular, we
 would like to always yield to a client no longer blocked on I/O; we
 need not yield to blocked clients, nor do we (usually) need arbitrary
@@ -176,13 +153,12 @@ interleaving of execution.
 In the event loop model, network I/O is done using non-blocking
 \t{read} and \t{write} calls and all of the blocking for I/O is
 centralized in a single call to a multiplexing system call such as
-\t{select} or \t{epoll}. The multiplexing call will block until there
-is some I/O ready to be performed and indicate to the application
-which file descriptors are ready. From this, the application then
-needs to decide how handle these events. This requires, for each
-connection, having some sort of state machine to track what state the
-connection is in and what needs to happen next, as well as other local
-state.
+\t{select} or \t{epoll}. The multiplexing call will block until some 
+I/O is ready to be performed, and indicates to the application
+which file descriptors are ready. To decide how to handle these 
+events, an application must, for each connection, have some sort of 
+state machine to track what state the connection is in and what 
+needs to happen next, as well as other local state.
 
 One common scheme for doing this involves registering a function
 pointer with the event loop to be called on an event. Typically each
@@ -198,12 +174,10 @@ disadvantage is that now network facing code needs to be scattered
 through many small functions, with all access to connection state
 mediated through a shared structure.
 
-The event loop model is then, essentially, built around closure
+The event loop model is then, essentially, built around closure-
 converted trampolining continuation passing style. These are well
 studied problems and can easily be done mechanically in the He-Man
 backend.
-
-\cite{*}
 
 \section{Implementation}
 
@@ -758,6 +732,27 @@ megabytes.
 
 % see how many threads we can spawn with Memory.hs
 
+% Related work:
+%\cite{VanderwaartCrary} re bounded time
+%\cite{vonBehrenEtAl} re Capriccio
+%\cite{vonBehrenConditBrewer} re cooperative multithreading
+%\cite{LiZdancewic}
+%\cite{LauerNeedham} also intro
+%\cite{MarlowEtAl} also intro
+
+% Functional programming:
+%\cite{Vinoski}
+%\cite{Hellstrom}
+%\cite{BiagioniEtAl}
+%\cite{LiEtAl}
+%\cite{GraunkeEtAl}
+%\cite{Queinnec}
+
+% Haskell EDSLs:
+%\cite{Gill}
+%\cite{ElliottEtAl}
+%\cite{LeijenMeijer}
+
 \section{Related work}
 
 The C10K problem is particularly evident in the context of HTTP
@@ -837,6 +832,8 @@ contribution, or is it obvious and been said a million times before?)
 design and implementation
 * We demonstrate that it is practical to build efficient network
 applications using our system
+
+\cite{*}
 
 \bibliography{citations}{}
 \bibliographystyle{abbrvnat}
