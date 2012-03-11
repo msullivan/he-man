@@ -2,8 +2,8 @@
 
 all: paper.pdf
 
-%.pdf: %.tex citations.bib graph_100.pdf graph_16K.pdf graph_128K.pdf
-	pdflatex $< && bibtex $* && pdflatex $< && pdflatex $< 
+paper.pdf: paper.tex citations.bib graph_100.pdf graph_16K.pdf graph_128K.pdf
+	pdflatex $< && bibtex paper && pdflatex $< && pdflatex $< 
 
 graph_100.ps: ../benchmarking/graph.py ../benchmarking/data/*
 	../benchmarking/graph.py ../benchmarking/data/*
