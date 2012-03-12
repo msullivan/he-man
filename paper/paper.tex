@@ -6,6 +6,12 @@
 \usepackage{listings}
 \usepackage[usenames,dvipsnames]{color}
 
+\newcommand{\prettybox}[1]{\fbox{\parbox{\linewidth}{#1}}}
+\newenvironment{smallverbatim}{\endgraf\small\verbatim}{\endverbatim} 
+\renewcommand{\t}{\texttt}
+\renewcommand{\b}{\textbf}
+\renewcommand{\i}{\textit}
+
 \lstset{
   language=Haskell,
   basicstyle=\small\ttfamily,
@@ -21,13 +27,8 @@
             {>>}{{>>}}2 {>>=}{{>>=}}2
             {|}{{$\mid$}}1
 }
-\lstnewenvironment{code}{\lstset{frame=}}{}
-
-\newcommand{\prettybox}[1]{\fbox{\parbox{\linewidth}{#1}}}
-\newenvironment{smallverbatim}{\endgraf\small\verbatim}{\endverbatim} 
-\renewcommand{\t}{\texttt}
-\renewcommand{\b}{\textbf}
-\renewcommand{\i}{\textit}
+%\lstnewenvironment{code}{\lstset{frame=}}{}
+\newenvironment{code}{\endgraf\small\verbatim}{\endverbatim} 
 
 % For BNF grammars:
 \def\bnf#1{\prettybox{\halign{##\hfil& \hfil ##\hfil& \ ##\hfil\cr #1}}}
@@ -38,7 +39,6 @@
 %There exist C/C++ libraries for event loops\cite{libevent}, but none of these
 %avoid the state machine paradigm.
 
-%XXX: new title?
 \title{He-Man: A domain-specific language for lightweight concurrency}
 %\subtitle{I said hey, what's goin' on}
 \authorinfo{Carlo Angiuli}{Carnegie Mellon University}{cangiuli@cs.cmu.edu}
@@ -51,10 +51,10 @@
 The event-driven model is the gold standard for highly concurrent network
 application programming; while threaded code is easier to write and reason
 about, it is considerably less scalable. We observe that these paradigms are not
-only interchangeable, but primarily confined to an application's core control
-flow; we propose a hybrid model in which programmers express this core logic at
-a high level of abstraction, yet are free to implement the remainder of the
-application at a low level.
+only interchangeable, but primarily confined to an application's core I/O
+control flow logic. We propose a hybrid model in which programmers express this
+core logic in a high-level concurrency abstraction, yet are free to implement
+the remainder of the application in a generic fashion.
 
 This paper describes the design and Haskell implementation of He-Man, a
 domain-specific language for network application programming which presents a
@@ -65,7 +65,7 @@ code. Our implementation is available at
 
 \section{Introduction}
 
-Modern network servers, like HTTP, IRC, and multiplayer games, need to support
+Modern network servers, as for HTTP, IRC, and multiplayer games, need to support
 many simultaneous, possibly idle, connections---this is known as the C10K
 (``10,000 client'') problem \cite{Kegel}. Because I/O latency is high,
 particularly over a network, our goal is to process ready clients while others
@@ -169,7 +169,7 @@ familiar to functional programmers as closure conversion (to access connection
 state across function boundaries), continuation-passing style (via function
 pointers) with trampolining (yielding to the event loop after registering I/O).
 These are well-studied conversions which can be performed mechanically by the
-He-Man backend.
+He-Man back-end.
 
 \section{Implementation}
 
@@ -238,7 +238,7 @@ can return \t{EAGAIN} and produces an action that generates code to
 simulate a blocking network operation. This allows us to describe how
 to simulate blocking I/O in a generic way, and then invoke it to
 create our concrete wrappers. (\t{.=.} is a wrapper for \b{Assign} 
-that takes a \t{Prog Expr} as its second argument and the \t{sock\_*} 
+that takes a \t{Prog Expr} as its second argument, and the \t{sock\_*} 
 functions invoke \b{Call} wrappers on the appropriate network calls.)
 
 \begin{figure}[ht]
@@ -478,28 +478,20 @@ through program \i{Stmt}s in reverse order, generating uniquely-named blocks
 whose only control-flow consists of (non-nested) tail-position jumps to other
 blocks. Threads are identified with their first block.
 
-TODO here we will discuss the transformations that occur
+\b{If} statements are the most interesting case. We place the subsequent
+statements in a separate block, and process the two bodies of the \b{If}
+statement, placing each in a separate block, and terminating each with a tail
+\b{Goto} to the subsequent statements. We then process the statements preceding
+the \b{If}, terminating their block with a tail-position \b{If} which jumps to
+either branch. \b{While} statements are handled in a similar fashion.
 
-%As an illustrative example, consider encountering an \b{If} statement in our
-%backwards pass, where we have access to the translation of the later
-%statements, as well as the earlier statements. Morally, we would like to
-%translate this to a conditional jump to the translation of either the first or
-%second arm, each of which is terminated by a jump to the later statements.
-%(Note that \t{flattenPrgm} leaves all optimization to the next pass.)
-
-%We package up the later statements in a new block, and then translate the
-%preceding statements, terminated by a tail-position conditional \b{If}. We also
-%translate each arm of the original \b{If}, terminated by a tail-position
-%\b{Goto} to the block containing the later statements. Importantly, all three
-%of these recursive translations may generate new blocks, which will be
-%collected automatically by the \t{Writer} monad.
-
-%Because blocking I/O may only happen in the main loop, we also terminate a
-%block after any blocking I/O call, by inserting a \b{GotoWait} to the block
-%containing the later statements. \b{GotoWait} is identical to \b{Goto} except
-%to signal to later passes that the thread \emph{must} yield to the main loop at
-%this location, and thus the goto must not be optimized away.
-% TODO for concurrency-related reasons
+We translate thread-blocking operations ($\b{Wait}~e$ in the front-end language)
+to a blocking jump ($\b{GotoWait}~e$) to a new code block containing the next
+statements to execute. \b{GotoWait} is similar to \b{Goto}, except that it
+contains an event to wait on, and is guaranteed not to be optimized away by
+later passes. Thread spawns are translated into a \b{Spawn} statement which
+takes a list of arguments and a destination label; the thread's code, which is
+part of the front-end \b{Spawn} statement, is processed separately.
 
 This pass generates a correct, albeit unnecessarily large, state machine with
 many empty blocks. Over the next few passes, our goal is to shrink this state
@@ -513,15 +505,91 @@ introduce nested \b{If}s in tail-position, for example, before an \t{if}
 statement at the end of a \t{while} loop, where control resumes in one of three
 blocks.
 
-At this point, we need to eliminate spurious control flow edges from our state
-machine in order to enable further block elimination. To do this, we perform
-block-local constant propagation and folding, and dead code elimination. At face
-value, it is not important for us to optimize straight-line code: our output is
-further optimized by a C compiler, and execution time is dominated by I/O, not
-computation. However, simple constant folding eliminates many \t{if} statements
-%TODO examples, justification
+At this point, we would like to eliminate spurious control flow from our state
+machine in order to enable further block elimination. Our \t{optimize} pass
+performs block-local constant propagation and folding, symbolic constraint
+propagation, and dead code elimination. At face value, it is not important for
+us to optimize straight-line code: our output is further optimized by a C
+compiler, and execution time is dominated by I/O, not computation. However,
+these simple optimizations can statically resolve many \b{If} tails generated by
+the previous pass, resulting in substantially less control flow.
 
-TODO here we discuss the fuseBlocks pass
+Consider, for example, the following code snippet from our library function
+\t{full\_write}:
+\begin{smallverbatim}
+full_write (fd, e) buf size = do
+  amt_written <- var "total_written" Int 0
+  failed <- var "failed" Int 0
+  while (amt_written .< size .&& failed .== 0) $ do
+    -- write amt bytes to buffer
+    ifE (amt .<= 0) (failed .= 1) $ -- amt_written += amt
+\end{smallverbatim}
+After only \t{simplifyJumps}, this function compiles to eight blocks, including
+the following:
+\begin{smallverbatim}
+Block 9 {
+  IInt total_written_16 = 0
+  IInt failed_17 = 0
+  if (total_written_16 < file_size_10 && failed_17 == 0)
+    goto 8
+  else
+    goto 7
+}
+Block 40 {
+  failed_17 := 1
+  if (total_written_16 < file_size_10 && failed_17 == 0)
+    goto 8
+  else
+    goto 7
+}
+\end{smallverbatim}
+Block 9 is executed the first time the \t{while} loop is encountered; block 40
+is executed on the \t{amt .<= 0} failure condition, and jumps back to the top
+of the \t{while} loop. But constant folding shows that the loop is always
+executed at least once, so long as the file size is positive, and is always
+exited when the failure condition is tripped. After optimization, we are left
+with:
+\begin{smallverbatim}
+Block 9 {
+  IInt total_written_16 = 0
+  IInt failed_17 = 0
+  if (0 < file_size_10)
+    goto 8
+  else
+    goto 7
+}
+Block 40 {
+  failed_17 := 1
+  goto 7
+}
+\end{smallverbatim}
+While \t{optimize} does not result in much smaller code, in practice it does
+remove many edges from the control flow graph.
+
+For performance reasons, we would like to yield to the event loop sparingly,
+which amounts to increasing the length of each block as much as possible. Our
+final optimization pass, \t{fuseBlocks}, hoists certain blocks into their
+callers to eliminate unnecessary yields. To facilitate hoisting, we generalize
+the grammar to allow statements in each branch of an \b{If} tail.
+
+We hoist blocks which are invoked in a unique location, and those which end in a
+thread \b{Exit} or blocking I/O (\b{GotoWait}). The former eliminates yields
+without increasing code size; the latter allows threads to register I/O or free
+resources immediately. In the \t{full\_write} example, block 40 is only reachable
+from the failure \t{if}, and is eliminated entirely, while the thread exit
+located after the \t{while} loop is hoisted into block 9.
+\begin{smallverbatim}
+Block 9 {
+  IInt total_written_16 = 0
+  IInt failed_17 = 0
+  if (0 < file_size_10)
+    goto 8
+  else
+    IInt tmp_19 = close(tmp_9)
+    exit
+}
+\end{smallverbatim}
+After optimization, \t{full\_write} is reduced from eight to four blocks.
 
 At this point, many blocks refer to variables declared in other blocks. The
 \t{collectFrees} pass traverses each block, collecting the variables each thread
@@ -619,7 +687,7 @@ machine has a total of five states.
 The He-Man version is 33 lines long and clearly represents the control flow of
 each individual thread. (This does not include the He-Man library, which has 25
 lines of code implementing generic routines for simulating blocking I/O using
-nonblocking I/O and wait.) The total line counts, somewhat understate the
+nonblocking I/O and wait.) The total line counts understate the
 difference between the versions, since the boilerplate for setting up
 connections is about the same for both versions. When just looking at the core
 read/write loop, the difference is much more apparent: the C version is 38 lines
@@ -663,7 +731,7 @@ Each trial was run 10 times. The plots show the arithmetic mean of the number of
 requests per second handled by each server; error bars show the standard
 deviation.
 
-% XXX work on the below paragraphs
+% XXX work on the below paragraphs?
 
 Figure \ref{fig:graph100} compares the three servers while serving a
 very small (100 byte) file. Measurements with small files test the
@@ -773,14 +841,15 @@ like Erlang's TCP/IP suite \cite{ParisEtAl}, and the FoxNet library for Standard
 ML \cite{BiagioniEtAl}, which uses continuations to implement coroutines for
 cooperative multithreading.
 
-It is important to note that in environments providing cooperative
-multithreading, like Capriccio, FoxNet, and He-Man, while the runtime guarantees
-that no thread monopolizes execution while waiting for I/O, it is certainly
-possible for one thread to monopolize execution by running indefinitely.
-Bounding execution time is a difficult problem which has been studied in the
-context of grid computing \cite{VanderwaartCrary}. The He-Man compiler
-guarantees that no code block contains an infinite loop; unbounded execution can
-only occur in calls to external functions.
+Cooperative multithreading (as in Capriccio, FoxNet, and He-Man) is more
+performant in this domain than preemption, because it avoids unnecessary context
+switches and executes only unblocked threads. On the other hand, the scheduler
+is only invoked when a thread voluntarily yields, so a thread may monopolize
+execution time if it never yields. Placing bounds on execution time is a
+difficult problem in general, and has been studied in the context of grid
+computing \cite{VanderwaartCrary}. The He-Man compiler guarantees that no code
+block contains an infinite loop; unbounded execution can only occur in calls to
+external functions.
 
 The Scheme community often uses continuations to develop web applications which
 robustly handle client state despite the statelessness of HTTP. This can be
