@@ -8,9 +8,8 @@ int set_sock_reuse(int fd)
 	                  &value, sizeof(value));
 }
 
-int set_sock_cork(int fd)
+int set_sock_cork(int fd, int value)
 {
-	int value = 1;
 	return setsockopt(fd, IPPROTO_TCP, TCP_CORK,
 	                  &value, sizeof(value));
 }

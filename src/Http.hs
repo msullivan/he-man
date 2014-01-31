@@ -19,14 +19,13 @@ http_make_hdr buf len fsize =
 setup_connection :: FdE -> Prog (FdE, EventE)
 setup_connection fd = do
   make_nb fd
-  set_sock_cork fd
   e <- mk_nb_event fd kEVENT_RDWR
   return (fd, e)
 
 setup_listener :: IntE -> Prog (FdE, EventE)
 setup_listener port = do
   fd <- socket kAF_INET kSOCK_STREAM 0
-  set_sock_reuse fd  
+  set_sock_reuse fd
   make_nb fd
   sock_bind_v4 fd kINADDR_ANY port
   sock_listen fd q_limit
@@ -68,9 +67,12 @@ child_code = declare_thread (FD) $
 
   file_size <- get_file_size file_fd
   hdr_length <- http_make_hdr buf bufsize file_size
+
+  set_sock_cork fd 1 -- we might want to uncork it at some point? not sure
+
   amount_written <- full_write ev buf hdr_length
   ifE' (amount_written .< hdr_length) cleanup
-  
+
   full_sendfile ev file_fd file_size
   cleanup
 

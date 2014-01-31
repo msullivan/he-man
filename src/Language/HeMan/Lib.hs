@@ -26,8 +26,8 @@ socket domain typ protcol =
 
 set_sock_reuse :: FdE -> Prog IntE
 set_sock_reuse fd = call (CFn "set_sock_reuse") Int (fd)
-set_sock_cork :: FdE -> Prog IntE
-set_sock_cork fd = call (CFn "set_sock_cork") Int (fd)
+set_sock_cork :: FdE -> IntE -> Prog IntE
+set_sock_cork fd val = call (CFn "set_sock_cork") Int (fd, val)
 
 make_nb :: FdE -> Prog ()
 make_nb fd = call' (CFn "make_socket_non_blocking") (fd)
@@ -152,8 +152,8 @@ kO_RDONLY = constant "O_RDONLY"
 kEAGAIN = constant "EAGAIN"
 
 -- This implementation depends on level triggered semantics
-do_nb_action :: IntE -> EventE -> Prog IntE -> Prog IntE
-do_nb_action mode e action = do
+do_nb_action_wait :: IntE -> EventE -> Prog IntE -> Prog IntE
+do_nb_action_wait mode e action = do
   res <- var "result" Int (-1)
   err <- var "err" Int kEAGAIN
   while (res .< 0 .&& err .== kEAGAIN) $ do
@@ -173,6 +173,9 @@ do_nb_action_nowait mode e action = do
     res .=. action
     err .= errno
   return res
+
+do_nb_action :: IntE -> EventE -> Prog IntE -> Prog IntE
+do_nb_action = do_nb_action_nowait
 
 accept (fd, e) =
   mk_fd <$> do_nb_action kEVENT_RD e (sock_accept fd)

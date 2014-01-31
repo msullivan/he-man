@@ -38,7 +38,9 @@ rt/echo2.c: Echo2.hs ${HEMAN_OBJ}
 
 # HTTP server
 
-rt/httpd: rt/http_lib.o rt/http.o ${MT_RUNTIME_OBJ}
+rt/httpd: rt/http_lib.o rt/http.o ${RUNTIME_OBJ}
+	${CC} ${CFLAGS} $^ -o $@ -laio
+rt/httpd_mt: rt/http_lib.o rt/http.o ${MT_RUNTIME_OBJ}
 	${CC} ${CFLAGS} $^ -o $@ -laio -lpthread
 
 rt/echo.o: rt/echo.c ${HEADERS}
@@ -47,7 +49,7 @@ rt/http.c: Http.hs ${HEMAN_OBJ}
 
 clean:
 	-rm -f Language/*.hi Language/*.o Language/HeMan/*.hi Language/HeMan/*.o \
-	    rt/echo.c rt/http.c rt/*.o 
+	    rt/echo.c rt/http.c rt/*.o
 
 reallyclean: clean
-	-rm -f rt/echod rt/httpd
+	-rm -f rt/echod rt/httpd rt/httpd_mt

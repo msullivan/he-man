@@ -26,7 +26,7 @@
 #define EVENT_RDWR (EPOLLIN|EPOLLOUT)
 
 int set_sock_reuse(int fd);
-int set_sock_cork(int fd);
+int set_sock_cork(int fd, int value);
 int make_socket_non_blocking(int sfd);
 int sock_bind_v4(int fd, int addr, int port);
 int print_int(int n);

@@ -158,6 +158,12 @@ void register_nb_event(thread_t *thread, event_t *e)
 	// helgrind will report a data race having to do with this, but
 	// I'm pretty sure it's actually fine. The event pointer is handed
 	// off through epoll.
+
+	// XXX: Actually, there is maybe a concurrency hazard since another
+	// thread could pick up the event in epoll immediately and try
+	// to run this thread before it has returned fully. This should
+	// be fine, though, since nothing else will be happening to this
+	// thread.
 	e->thread = thread;
 	// XXX: this only makes sense for epoll events, not AIO ones
 	if (epoll_ctler(EPOLL_CTL_MOD, e->u.nb.fd,
