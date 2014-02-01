@@ -68,7 +68,7 @@ child_code = declare_thread (FD) $
   file_size <- get_file_size file_fd
   hdr_length <- http_make_hdr buf bufsize file_size
 
-  set_sock_cork fd 1 -- we might want to uncork it at some point? not sure
+  set_sock_cork child_fd 1 -- we might want to uncork it at some point? not sure
 
   amount_written <- full_write ev buf hdr_length
   ifE' (amount_written .< hdr_length) cleanup
