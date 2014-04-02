@@ -50,7 +50,7 @@ rt/http.c: Http.hs ${HEMAN_OBJ}
 
 clean:
 	-rm -f Language/*.hi Language/*.o Language/HeMan/*.hi Language/HeMan/*.o \
-	    rt/echo.c rt/http.c rt/*.o 
+	    rt/echo.c rt/http.c rt/*.o
 
 reallyclean: clean
-	-rm -f rt/echod rt/httpd
+	-rm -f rt/echod rt/httpd rt/httpd_mt

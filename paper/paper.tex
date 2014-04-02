@@ -3,14 +3,21 @@
 {hyperref}
 \usepackage{graphicx}
 \usepackage{verbatim}
-
 \usepackage{listings}
+\usepackage[usenames,dvipsnames]{color}
+
+\newcommand{\prettybox}[1]{\fbox{\parbox{\linewidth}{#1}}}
+\newenvironment{smallverbatim}{\endgraf\small\verbatim}{\endverbatim} 
+\renewcommand{\t}{\texttt}
+\renewcommand{\b}{\textbf}
+\renewcommand{\i}{\textit}
+
 \lstset{
   language=Haskell,
   basicstyle=\small\ttfamily,
   frame=trbl,
   basewidth={0.5em,0.45em},
-%  commentstyle=\ttfamily\color{ForestGreen},
+  commentstyle=\ttfamily\color{ForestGreen},
   literate=*{+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
             {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
             {\\\\}{{\char`\\\char`\\}}1
@@ -20,31 +27,18 @@
             {>>}{{>>}}2 {>>=}{{>>=}}2
             {|}{{$\mid$}}1
 }
+%\lstnewenvironment{code}{\lstset{frame=}}{}
+\newenvironment{code}{\endgraf\small\verbatim}{\endverbatim} 
 
-\lstnewenvironment{egcode}
-  {\lstset{frame=TRBL}}
-  {\lstset{frame=trbl}}
-
-\lstnewenvironment{code}
-  {\lstset{frame=}}
-  {}
-
-\newenvironment{smallverbatim}{\endgraf\small\verbatim}{\endverbatim} 
-\renewcommand{\t}{\texttt}
-\renewcommand{\b}{\textbf}
-\renewcommand{\i}{\textit}
-
-\newcommand{\prettybox}[1]{\fbox{\parbox{\linewidth}{#1}}}
-
-% A bunch of crazy BNF TeX I wrote once
+% For BNF grammars:
 \def\bnf#1{\prettybox{\halign{##\hfil& \hfil ##\hfil& \ ##\hfil\cr #1}}}
 \def\p#1{& = & #1 \cr}
 \def\pp#1{& & #1 \cr}
 \def\a#1{& $\mid$ & #1 \cr}
 
-% XXX: We need to cite ElliottEtAl somewhere!
+%There exist C/C++ libraries for event loops\cite{libevent}, but none of these
+%avoid the state machine paradigm.
 
-%XXX: new title?
 \title{He-Man: A domain-specific language for lightweight concurrency}
 %\subtitle{I said hey, what's goin' on}
 \authorinfo{Carlo Angiuli}{Carnegie Mellon University}{cangiuli@cs.cmu.edu}
@@ -53,154 +47,129 @@
 \begin{document}
 \maketitle
 
-% TODO: talk about type system, runtime improvements, optimizations
-
 \begin{abstract}
 The event-driven model is the gold standard for highly concurrent network
 application programming; while threaded code is easier to write and reason
-about, it is considerably less scalable.
+about, it is considerably less scalable. We observe that these paradigms are not
+only interchangeable, but primarily confined to an application's core I/O
+control flow logic. We propose a hybrid model in which programmers express this
+core logic in a high-level concurrency abstraction, yet are free to implement
+the remainder of the application in a generic fashion.
 
-We observe that these paradigms are not only interchangeable, but primarily
-confined to an application's core control flow; we propose a hybrid model in
-which programmers express this core logic at a high level of abstraction, yet
-are free to implement the remainder of the application at a low level.
-
-This paper describes the design and Haskell implementation of He-Man, a domain
-specific language for network application programming which presents a
+This paper describes the design and Haskell implementation of He-Man, a
+domain-specific language for network application programming which presents a
 sequential thread-like abstraction, but compiles to performant event-driven C
 code. Our implementation is available at
-\url{https://github.com/msullivan/he-man}.
-%\cite{HeMan}
+\url{https://github.com/msullivan/he-man}. %\cite{HeMan}
 \end{abstract}
 
 \section{Introduction}
-building scalable concurrent network applications. The
-language presents a 
 
-presents difficult concurrency challenges 
-implementation challenge to developers
-supporting many simultaneous clients
-although memory and bandwidth is plentiful
-difficult to design applications
-to take full advantage of these resources.
-threads inefficient (scheduling)
-event loops (hard to write)
+Modern network servers, as for HTTP, IRC, and multiplayer games, need to support
+many simultaneous, possibly idle, connections---this is known as the C10K
+(``10,000 client'') problem \cite{Kegel}. Because I/O latency is high,
+particularly over a network, our goal is to process ready clients while others
+are blocked on I/O. To achieve maximum throughput, such servers are usually
+written in low-level languages like C.
 
-\cite{LauerNeedham}, 
+The simplest way to achieve this concurrency is to use kernel threads, like the
+industry-standard Apache web server \cite{Apache}. These incur a fair amount of
+overhead, and do not allow control over scheduling; they waste time, for
+example, yielding to I/O blocked clients.
 
-in a natural, straight-line manner while
-still producing efficient event loop-based code. 
+More performant web servers, such as Nginx \cite{Nginx} and Lighttpd
+\cite{Lighttpd}, use non-blocking I/O routines, multiplexed at a single call
+site (the ``event loop''). This allows one thread to serve many clients,
+handling each only when its I/O has completed. This event-driven model requires
+the routines to explicitly yield to the event loop, forcing programmers to
+restructure their code as a state machine, save state across function
+boundaries, and implement a scheduler. 
 
-He-Man programs are compact and
-measurements indicate that it performs acceptably. Our implementation is
-available at
-, embedded, domain specific language in Haskell for
-building 
+Although the event-driven model is typically chosen by developers who wish to
+maximize performance (as with Nginx and Lighttpd), von Behren, Condit, and
+Brewer \cite{vonBehrenConditBrewer} argue that events are an unnatural
+abstraction for this problem domain, and that an appropriate threading library
+(in particular, without preemption) can achieve equivalent performance.
 
+In an oft-cited 1979 paper, Lauer and Needham \cite{LauerNeedham} argue that the
+threaded and event-driven models are dual, where the thread scheduler plays the
+role of an event loop. Then the translation from threads is simply trampolining
+continuation-passing-style, where, in this case, I/O operations must yield.
 
-Network applications need to support many simultaneous clients---this is known
-as the C10K (``10,000 client'') problem \cite{Kegel}. Modern servers have enough
-memory and bandwidth for massive concurrency, but it is difficult to design
-applications to take full advantage of these resources.
+The idea of implementing custom schedulers for lightweight thread abstractions
+is not new, and has been used to great effect in functional language runtimes
+like GHC \cite{MarlowEtAl}. Li and Zdancewic \cite{LiZdancewic} have developed
+monadic abstractions in Haskell for threaded and event-driven concurrency, for
+the same problem domain of scalable network applications; their implementation
+draws upon concurrency and synchronization support in the GHC runtime.
 
-A server must maintain separate state for each connection, and often waits for
-network or disk I/O to complete before continuing to serve a particular client.
-The simplest solution is to maintain one thread per client, using blocking I/O
-within each thread. This incurs frequent and expensive context switches at the
-operating system level; because the threads have identical code and little
-private data, this approach is unnecessary and does not scale.
+We observe that, although concurrency is critical to network applications
+because I/O dominates computation time, core I/O routines comprise a small
+portion of an application's program logic, which is otherwise devoted to
+protocol implementation, caching, etc. We might expect that our concurrency
+abstractions can be similarly confined; however, the above solutions require
+writing the entire application in Haskell, or at least writing the core in
+Haskell and making liberal use of the FFI.
 
-An improvement is to write multithreaded code in which each thread serves
-multiple clients. This is the most popular approach, and is utilized in the
-Apache HTTP server \cite{Apache}.
+Our contribution is to distill the Lauer-Needham duality to its essence, by
+compiling from a simple thread abstraction to self-contained event-driven C
+code. This abstraction, He-Man: Haskell Event Manager, Apropos Networking, is a
+compiled domain-specific language embedded in Haskell, which offers a small
+monadic language supporting thread spawning, blocking events, and external
+function calls.
 
-Languages like Erlang and Haskell provide lightweight threads via user-space
-schedulers. This affords even better performance, but remains unnecessarily
-powerful for this problem space, imposing runtime overhead on applications which
-don't require preemptable, independently scheduled threads \cite{Vinoski}.
+The He-Man system consists of a compiler written in Haskell, and a lightweight
+runtime in C which links with the compiled code. He-Man allows programmers to
+develop scalable network applications by expressing their I/O logic in He-Man,
+and linking the resulting event loop to the rest of their application, which can
+be written in C or any language which interfaces with C. We target C because it
+is commonly used in this domain, and well-suited to performance-critical
+applications.
 
-By far the leanest approach is to write an event loop around kernel facilities
-for multiplexed, non-blocking I/O, such as \t{select}, \t{poll}, \t{epoll}, or
-\t{kqueue}. In this model, all blocking occurs at a single call site in the
-code. The programmer is responsible for explicitly maintaining per-client state
-and invoking the appropriate client on each I/O event.
+In the remainder of the paper, we discuss the event-driven programming model,
+our implementation of the He-Man system, and verify that its performance is
+competitive with handwritten event loops.
 
-This requires the entire application to be restructured as a state machine with
-explicit per-client control blocks, a model which is very difficult for
-programmers to reason about. There exist numerous C/C++ libraries for event
-loops, but none of these avoid the state machine paradigm.
-
-Our observation is that the event loop model is simply trampolining
-continuation-passing-style, % TODO citation
-which can be obtained by mechanical translation from the straight-line threaded
-code. This suggests it is possible to obtain the best of both worlds---a
-threaded programming model with the performance of event loops. 
-
-To that end, we present He-Man: Haskell Event Manager, Apropos Networking, an
-embedded domain-specific language (EDSL) hosted in Haskell, which provides a
-threaded abstraction for network application programming and compiles to a C
-event loop based around Linux's \t{epoll}.
-
-He-Man is a straightforward monadic language with built-in network primitives,
-offering a simple thread-per-client programming model. It is easily extensible
-in Haskell, and also allows calls to foreign C functions; it outputs C code
-which links with an event loop runtime and any code a programmer might prefer to
-write directly in C. Our vision is that C programmers can use He-Man for their
-core application logic, and can write the rest of their application in C. 
-
-\cite{*}
-
-% Contributions; probably should be elsewhere
-We identify our contributions as:
-\begin{enumerate}
-
-\item We present a case study of compiled embedded domain specific
-  language design and implementation.
-\end{enumerate}
-
-\section{The event loop model}
-%% XXX: it isn't really clear what's going on in this section; it
-%% doesn't /really/ talk about event loop stuff in general. It is
-%% talking about one possible way to write event based things (the way
-%% He-Man generates).
+\section{The event-driven model}
 
 Network applications require a very constrained form of
-concurrency. Because in most network applications, I/O (both network
-and disk) latency dominates the computation time, each client's thread
+concurrency. In most network applications, network and disk
+I/O latency dominate computation time, so each client's thread
 of execution spends most of its time waiting on I/O. In particular, we
 would like to always yield to a client no longer blocked on I/O; we
 need not yield to blocked clients, nor do we (usually) need arbitrary
 interleaving of execution.
 
-In the event loop model, network I/O is done using non-blocking
-\t{read} and \t{write} calls and all of the blocking for I/O is
-centralized in a single call to a multiplexing system call such as
-\t{select} or \t{epoll}. The multiplexing call will block until there
-is some I/O ready to be performed and indicate to the application
-which file descriptors are ready. From this, the application then
-needs to decide how handle these events. This requires, for each
-connection, having some sort of state machine to track what state the
-connection is in and what needs to happen next, as well as other local
-state.
+In the event-driven model, network I/O is performed with non-blocking
+\t{read} and \t{write} calls, and all blocking on I/O is consolidated
+in a single, centralized call to a multiplexing system call such as
+\t{select} or \t{epoll}. This multiplexing call blocks until some 
+I/O is ready to be performed, and indicates to the application
+which file descriptors are ready. To decide how to handle these 
+events, an application must, for each connection, maintain a
+state machine to track the connection's current and next states, as 
+well as any local data.
 
-One common scheme for doing this involves registering a function
-pointer with the event loop to be called on an event. Typically each
-connection is also associated with a structure of connection local
-data. Instead of making a blocking system call, then, an application
-registers an event with the event loop along with the function to call
-when it occurs, and then returns back to the loop.
+One common solution involves registering a function
+pointer with the event loop to be called on an event. Typically, each
+connection is also associated with a structure of connection-local
+data. Instead of making a blocking system call, an application
+registers an event with a function pointer to call once the event 
+occurs, and then returns back to the loop.
 
 The advantage of this scheme is that it is highly scalable and can be
-efficient: handling a new connection typically just involves
-allocating a new structure and registering it with the event loop. The
-disadvantage is that now network facing code needs to be scattered
-through many small functions, with all access to connection state
-mediated through a shared structure.
+efficient: handling a new connection requires only allocating a new 
+structure and registering it with the event loop. The disadvantage is 
+that network-facing code must be scattered across many small functions 
+which call each other only through function pointers, and all connection 
+state is accessed through a shared structure.
 
-The event loop model is then, essentially, built around closure
-converted trampolining continuation passing style. These are well
-studied problems and can easily be done mechanically in the He-Man
-backend.
+However, as we discuss in the next section, these code transformations are
+familiar to functional programmers as closure conversion (to access connection
+state across function boundaries), continuation-passing style (via function
+pointers) with trampolining (yielding to the event loop after registering I/O).
+These are well-studied conversions which can be performed mechanically by the
+He-Man back-end.
 
 \section{Implementation}
 
@@ -217,7 +186,9 @@ list of arguments and launches the associated code with those
 arguments available to it, and \b{Wait}, which takes an event
 expression as an argument and blocks until the event is
 ``ready''. Note that \b{Call} is for calling foreign functions; He-Man
-does not have its own notion of function.
+does not have its own notion of function.\footnote{Adding functions or
+observable sharing to He-Man could reduce output code size, but would have
+little impact on performance.}
 
 Since writing programs using the abstract syntax would be highly
 inconvenient, we provide a monadic library for writing He-Man
@@ -267,7 +238,7 @@ can return \t{EAGAIN} and produces an action that generates code to
 simulate a blocking network operation. This allows us to describe how
 to simulate blocking I/O in a generic way, and then invoke it to
 create our concrete wrappers. (\t{.=.} is a wrapper for \b{Assign} 
-that takes a \t{Prog Expr} as its second argument and the \t{sock\_*} 
+that takes a \t{Prog Expr} as its second argument, and the \t{sock\_*} 
 functions invoke \b{Call} wrappers on the appropriate network calls.)
 
 \begin{figure}[ht]
@@ -342,39 +313,30 @@ do_write (fd, e) buf size =
 
 \subsection{Type system}
 
-It is important to provide some sort of type discipline for He-Man
-programs. Providing a type system in the front end allows us to
-guarantee that the C we output does not contain type errors, vastly
-simplifying development. We also take advantage of this to provide
-type abstractions above and beyond C's limited type system. % XXX: bad wording
-For example, He-Man's type system contains an abstract
-$\b{FD}$ type that is distinct from the type of integers.
+We provide a simple type system for He-Man programs which guarantees that we
+generate C code which is free of type errors. We take advantage of this to
+provide abstractions not present in C, e.g., the \b{FD} type of file descriptors
+is distinct from integers in He-Man, while C draws no distinction between them.
 
-We offload the work of type checking He-Man programs to the Haskell type
-checker. Our method for doing this is fairly standard, following Leijen and
-Meijer \cite{LeijenMeijer} in using phantom types to enforce typing.
-
-A fragment of the code implementing the He-Man type system is shown in
-Figure \ref{fig:types}. The internal type and expression
-representations are the datatypes \t{IExpr} and \t{IType}, and
-typed expressions are represented with the \t{Expr} data type
+We type-check He-Man programs with the Haskell type checker, following Leijen
+and Meijer \cite{LeijenMeijer} in using phantom types. A fragment of the code
+implementing the He-Man type system is shown in Figure \ref{fig:types}. Types
+and expressions are internally represented by the datatypes \t{IExpr} and
+\t{IType}, and typed expressions are represented with the \t{Expr} data type
 constructor, which is a trivial wrapper around \t{IExpr} parameterized
-over a phantom type. Operations on typed expressions have type
-signatures that restrict them to the proper types, and then peel away
-the wrapper to work on the \t{IExpr} underneath.
+over a phantom type. Operations on typed expressions have type signatures that
+restrict them to the proper types, and discard the wrapper to act on the
+\t{IExpr} underneath.
 
-% XXX: say something about GADTs??
-Types are represented by the \t{Type} GADT that is also parameterized
-over a phantom type representing the underlying type. Expression
-builder functions will convert \t{Type} values are to \t{Itype} using
-the \t{toItype} function, which does a simple pass-through conversion.
-The decision to make \t{Type} a GADT instead of a simple wrapper with
-constructor functions in the same manner as \t{Expr} is for purely
-aesthetic reasons: we felt that type annotations in He-Man code were
-more clearly readable if they were capitalized, which required that
-they be datatype constructors.
-\footnote{The authors believe that this may be the worst reason to
-  choose to use GADTs to date.}
+Types are represented by the \t{Type} GADT, which is parameterized over a
+phantom type representing the underlying type. When building expressions, we
+convert \t{Type} values to \t{IType} with the \t{toItype} function. The decision
+to make \t{Type} a GADT instead of a simple wrapper with constructor functions
+in the same manner as \t{Expr} is purely aesthetic: we felt that type
+annotations in He-Man code were more clearly readable if they were capitalized,
+which required them to be datatype constructors.
+%\footnote{The authors believe that this may be the worst reason to
+%  choose to use GADTs to date.}
 
 \begin{figure}[ht]
 \centering
@@ -414,39 +376,33 @@ typ2 f (E e1) (E e2) = E (f e1 e2)
 var :: String -> Type a -> Expr a -> Prog (Expr a)
 var = ...
 \end{code}
-\caption{He-Man expression typing} % XXX
+\caption{Implementation of He-Man type system.}
 \label{fig:types}
 \end{figure}
 
-Type checking foreign function calls and thread declaration and
-spawning is somewhat more interesting.  For foreign function calls,
-our main concern was being able to write a single wrapper for call
-that handles a varying number of typed arguments. We want more than
-this, however: we want to ensure that both the code for a declared
-thread uses its arguments properly at the declared types code and that
-spawning threads provides arguments of the correct types.
-% and maybe a bit novel? I dunno.
+Type-checking foreign function calls and thread declaration and spawning is
+somewhat more interesting. We wanted a single wrapper for foreign function calls
+to handle a varying number of typed arguments; we also wanted to ensure that
+thread spawn sites pass in values of the correct types, and declared threads use
+their arguments in type-safe ways.
 
 A fragment of the code implementing typing for these features is shown
 in Figure \ref{fig:arg-packets}. The key is the multi-parameter type
 class \t{ArgPacket}. \t{ArgPacket} is parameterized over related
-tuples \footnote{Technically speaking, the unary \t{ArgPacket}s are
-  not actually tuples.} of expressions and types. The idea is that
+tuples\footnote{Technically speaking, the unary \t{ArgPacket}s are
+not actually tuples.} of expressions and types. The idea is that
 there exists an instance \t{ArgPacket exps tys} if and only if
 \t{exps} and \t{tys} are tuples of \t{Expr}s and \t{Type}s,
-respectively, the tuples have the same number of elements, and for
+respectively; the tuples have the same number of elements; and for
 each pair of corresponding elements in the two tuples, the \t{Type}
 represents the type of the \t{Expr} (that is, they have the same
-phantom type argument). To enforce this one-to-one correspondence and
-to allow the Haskell inferencer to use the information it provides, we
-use functional dependencies % XXX: cite, or something?
-to declare that both \t{exps} and \t{tys} are uniquely determined by
-the other.
+phantom type argument).
 
-Then, by parameterizing the wrapper functions for foreign function
-calls and thread declaration and spawning over \t{ArgPacket exps tys},
-we get the desired typing guarantees.
-% XXX: is this explained fully?
+We use functional dependencies to declare that both \t{exps} and \t{tys} are
+uniquely determined by the other, which enforces this one-to-one correspondence
+and allows the Haskell inferencer to use provided typing information. We obtain
+our desired typing guarantees by parameterizing the wrapper functions for
+foreign function calls and thread declaration/spawning over \t{ArgPacket exps tys}.
 
 \begin{figure}[ht]
 \centering
@@ -481,7 +437,7 @@ call :: ArgPacket exps tys =>
 call = ...
 
 \end{code}
-\caption{He-Man argument packets} % XXX
+\caption{Implementation of He-Man \t{ArgPacket}s.}
 \label{fig:arg-packets}
 \end{figure}
 
@@ -521,28 +477,21 @@ machine of code blocks. This occurs in our \t{flattenPrgm} pass, which passes
 through program \i{Stmt}s in reverse order, generating uniquely-named blocks
 whose only control-flow consists of (non-nested) tail-position jumps to other
 blocks. Threads are identified with their first block.
-% TODO discuss the transformations
 
-%As an illustrative example, consider encountering an \b{If} statement in our
-%backwards pass, where we have access to the translation of the later
-%statements, as well as the earlier statements. Morally, we would like to
-%translate this to a conditional jump to the translation of either the first or
-%second arm, each of which is terminated by a jump to the later statements.
-%(Note that \t{flattenPrgm} leaves all optimization to the next pass.)
+\b{If} statements are the most interesting case. We place the subsequent
+statements in a separate block, and process the two bodies of the \b{If}
+statement, placing each in a separate block, and terminating each with a tail
+\b{Goto} to the subsequent statements. We then process the statements preceding
+the \b{If}, terminating their block with a tail-position \b{If} which jumps to
+either branch. \b{While} statements are handled in a similar fashion.
 
-%We package up the later statements in a new block, and then translate the
-%preceding statements, terminated by a tail-position conditional \b{If}. We also
-%translate each arm of the original \b{If}, terminated by a tail-position
-%\b{Goto} to the block containing the later statements. Importantly, all three
-%of these recursive translations may generate new blocks, which will be
-%collected automatically by the \t{Writer} monad.
-
-%Because blocking I/O may only happen in the main loop, we also terminate a
-%block after any blocking I/O call, by inserting a \b{GotoWait} to the block
-%containing the later statements. \b{GotoWait} is identical to \b{Goto} except
-%to signal to later passes that the thread \emph{must} yield to the main loop at
-%this location, and thus the goto must not be optimized away.
-% TODO for concurrency-related reasons
+We translate thread-blocking operations ($\b{Wait}~e$ in the front-end language)
+to a blocking jump ($\b{GotoWait}~e$) to a new code block containing the next
+statements to execute. \b{GotoWait} is similar to \b{Goto}, except that it
+contains an event to wait on, and is guaranteed not to be optimized away by
+later passes. Thread spawns are translated into a \b{Spawn} statement which
+takes a list of arguments and a destination label; the thread's code, which is
+part of the front-end \b{Spawn} statement, is processed separately.
 
 This pass generates a correct, albeit unnecessarily large, state machine with
 many empty blocks. Over the next few passes, our goal is to shrink this state
@@ -556,16 +505,91 @@ introduce nested \b{If}s in tail-position, for example, before an \t{if}
 statement at the end of a \t{while} loop, where control resumes in one of three
 blocks.
 
-At this point, we need to eliminate spurious control flow edges from our state
-machine in order to enable further block elimination. To do this, we perform
-block-local constant propagation and folding, and dead code elimination. At face
-value, it is not important for us to optimize straight-line code: our output is
-further optimized by a C compiler, and execution time is dominated by I/O, not
-computation. However, simple constant folding eliminates many \t{if} statements
-%TODO examples, justification
+At this point, we would like to eliminate spurious control flow from our state
+machine in order to enable further block elimination. Our \t{optimize} pass
+performs block-local constant propagation and folding, symbolic constraint
+propagation, and dead code elimination. At face value, it is not important for
+us to optimize straight-line code: our output is further optimized by a C
+compiler, and execution time is dominated by I/O, not computation. However,
+these simple optimizations can statically resolve many \b{If} tails generated by
+the previous pass, resulting in substantially less control flow.
 
-Once our 
-% TODO fuseBlocks pass
+Consider, for example, the following code snippet from our library function
+\t{full\_write}:
+\begin{smallverbatim}
+full_write (fd, e) buf size = do
+  amt_written <- var "total_written" Int 0
+  failed <- var "failed" Int 0
+  while (amt_written .< size .&& failed .== 0) $ do
+    -- write amt bytes to buffer
+    ifE (amt .<= 0) (failed .= 1) $ -- amt_written += amt
+\end{smallverbatim}
+After only \t{simplifyJumps}, this function compiles to eight blocks, including
+the following:
+\begin{smallverbatim}
+Block 9 {
+  IInt total_written_16 = 0
+  IInt failed_17 = 0
+  if (total_written_16 < file_size_10 && failed_17 == 0)
+    goto 8
+  else
+    goto 7
+}
+Block 40 {
+  failed_17 := 1
+  if (total_written_16 < file_size_10 && failed_17 == 0)
+    goto 8
+  else
+    goto 7
+}
+\end{smallverbatim}
+Block 9 is executed the first time the \t{while} loop is encountered; block 40
+is executed on the \t{amt .<= 0} failure condition, and jumps back to the top
+of the \t{while} loop. But constant folding shows that the loop is always
+executed at least once, so long as the file size is positive, and is always
+exited when the failure condition is tripped. After optimization, we are left
+with:
+\begin{smallverbatim}
+Block 9 {
+  IInt total_written_16 = 0
+  IInt failed_17 = 0
+  if (0 < file_size_10)
+    goto 8
+  else
+    goto 7
+}
+Block 40 {
+  failed_17 := 1
+  goto 7
+}
+\end{smallverbatim}
+While \t{optimize} does not result in much smaller code, in practice it does
+remove many edges from the control flow graph.
+
+For performance reasons, we would like to yield to the event loop sparingly,
+which amounts to increasing the length of each block as much as possible. Our
+final optimization pass, \t{fuseBlocks}, hoists certain blocks into their
+callers to eliminate unnecessary yields. To facilitate hoisting, we generalize
+the grammar to allow statements in each branch of an \b{If} tail.
+
+We hoist blocks which are invoked in a unique location, and those which end in a
+thread \b{Exit} or blocking I/O (\b{GotoWait}). The former eliminates yields
+without increasing code size; the latter allows threads to register I/O or free
+resources immediately. In the \t{full\_write} example, block 40 is only reachable
+from the failure \t{if}, and is eliminated entirely, while the thread exit
+located after the \t{while} loop is hoisted into block 9.
+\begin{smallverbatim}
+Block 9 {
+  IInt total_written_16 = 0
+  IInt failed_17 = 0
+  if (0 < file_size_10)
+    goto 8
+  else
+    IInt tmp_19 = close(tmp_9)
+    exit
+}
+\end{smallverbatim}
+After optimization, \t{full\_write} is reduced from eight to four blocks.
 
 At this point, many blocks refer to variables declared in other blocks. The
 \t{collectFrees} pass traverses each block, collecting the variables each thread
@@ -595,30 +619,29 @@ a \t{main} function which spawns the first thread and jumps to the main loop.
   
 \subsection{Runtime}
 
-The He-Man runtime is written in C and provides a state machine based
-thread scheduling model. In the view of the runtime, a thread consists
-of some bookkeeping state, some private state, and the next
-continuation function the thread is to run. The main part of the
-runtime's state consists of the runqueue, which contains a list of all
-currently runnable threads.
+The He-Man runtime is a multithreaded C program which provides a generic state
+machine thread scheduling model. To the runtime, a thread consists of some
+bookkeeping state, some private state, and the thread's next continuation
+function. The runtime's state is primarily in the runqueue, which contains a
+list of all currently runnable threads.
 
-Continuation functions take a pointer to the thread information,
-perform some computation (such as making non-blocking I/O calls),
-update the continuation field in the thread data, and return whether
-the thread is still runnable; to block, a continuation function
+Each continuation function takes a pointer to the thread information,
+performs some computation (e.g., making non-blocking I/O calls),
+updates the continuation field in the thread data, and returns whether
+the thread is still runnable. To block, a continuation function
 registers itself as blocking on an event and returns false; to exit,
-it frees the thread structure and returns false.  Running a thread,
+it frees the thread structure and returns false. Running a thread,
 then, consists of repeatedly invoking the thread's continuation
 function until it returns false. To prevent a thread that does not
-need to block from starving the rest of the system, after some number
-of invocations of the continuation (currently 50), the thread is
-paused and put on the back of the runqueue.
+need to block from starving the rest of the system, after a continuation is
+invoked some number of times (currently 50), the thread is paused and moved to
+the back of the runqueue.
 
-The He-Man runtime main loop is very simple, then: each worker thread
+The He-Man runtime main loop is very simple: each worker thread
 loops indefinitely, and on each iteration it removes the thread at the
 head of the runqueue (if it exists) and runs it, and polls for I/O
-events. A global runqueue is shared between threads; a more clever
-runtime could have per-worker-thread runqueues and do some sort of
+events. A global runqueue is shared between threads; a fancier 
+implementation could maintain per-worker-thread runqueues and use
 work stealing.
 
 The runtime provides a blocking mechanism based on an event
@@ -626,192 +649,228 @@ abstraction. To the runtime, an event consists of a type tag, a
 pointer to a thread that is blocked on it and some event type specific
 data (such as a file descriptor or a pointer to an associated
 channel). Events are level-triggered: blocking on an event will return
-whenever the event ``is ready'', as opposed to when the event
-``becomes ready'' as in edge-triggered (using edge-triggered semantics
-causes extra difficulties in an environment with multiple threads
-processing events).
+whenever the event ``is ready'', not when the event ``becomes ready''
+(edge-triggered). We make this design decision because edge-triggered semantics
+cause difficulties in an environment where multiple threads are processing
+events.
 
 Currently, the He-Man runtime provides support for two types of
 events: socket/pipe file I/O and asynchronous He-Man channels.  The
-runtime has partial support for Linux Kernel Asynchronous IO for file
-IO, using a Linux \t{eventfd} to allow \t{epoll} to wait on AIO
+runtime has partial support for Linux Kernel Asynchronous I/O for file
+I/O, using a Linux \t{eventfd} to allow \t{epoll} to wait on asynchronous I/O
 events. Adding new types of events that an application requires would
 be simple, but require some runtime hacking.
 
-The actual polling for I/O events is done by calling \t{epoll}
-(although it would not be difficult to adapt it to use BSD's
-\t{kqueue} or the more standard \t{poll} or \t{select}).  For each
-event that has been returned by \t{epoll}, if a thread is waiting on
-the event, the thread is added to the runqueue. If the the runqueue is
-empty, the call to \t{epoll} blocks, otherwise it is called with a
-timeout of zero seconds, to simply poll for events.
+The actual polling for I/O events is done by calling \t{epoll}, and could be
+easily adapted to BSD's \t{kqueue}, or the more standard \t{poll} or \t{select}.
+For each event that \t{epoll} returns, if a thread is waiting on that event, the
+thread is added to the runqueue. If the the runqueue is empty, the call to
+\t{epoll} blocks; otherwise it is called with a timeout of zero seconds, to
+simply poll for events.
 
 \section{Evaluation}\label{sec:evaluation}
 
 To evaluate He-Man, we built several network applications with He-Man
-and compared them to similar network applications built in C.  We also
-discuss He-Man's memory overhead.
+and compared them to similar network applications built in C.
 
 \subsection{Echo Server}
 
-To compare the ease of writing event based network applications, we
-built simple echo servers using both He-Man and C. The C version was
-written in as an event loop driven explicit state machine using the
-He-Man runtime. The C version, which is fairly tightly written and
-which uses the He-Man runtime in its capacity as a somewhat generic
-event based IO framework, is 98 lines of source, according to
-SLOCCount. It is fairly readable, but its structure is obscured by
-being split into states and the need to explicitly handle read and
-write returning \t{EAGAIN} and write returning short. The state
-machine has a total of five states. The He-Man version is 33 lines
-long and is a very clear representation of the control flow of each
-individual thread. (Additionally, the He-Man library has 17 lines of
-code implementing generic routines for simulating blocking IO using
-nonblocking IO and wait.) The total line counts, however, somewhat
-understate the difference between the versions, since the boilerplate
-for setting up connections is about the same for both versions. When
-just looking at the core read/write loop, the difference is much more
-apparent: the C version is 38 lines of code, and the He-Man version is
-5.
+To compare the ease of writing event-driven network applications, we wrote
+simple echo servers in both He-Man and C. The C version was written as an
+explicit state machine using the He-Man runtime in its capacity as a generic
+event-driven I/O framework.  This code is fairly tightly written, and consists
+of 98 lines of source code, according to SLOCCount.  It is fairly readable, but
+its structure is obscured by being split into states, and the need to explicitly
+handle read and write returning \t{EAGAIN}, or write returning short. The state
+machine has a total of five states.
 
-The generated code is substantially less tight than the C version,
-although it is unlikely to be any slower in practice. It has 10 states
-and is 240 lines of C.
-%This could be reduced substantially by allowing
-%conditionals outside of block tail position.
+The He-Man version is 33 lines long and clearly represents the control flow of
+each individual thread. (This does not include the He-Man library, which has 25
+lines of code implementing generic routines for simulating blocking I/O using
+nonblocking I/O and wait.) The total line counts understate the
+difference between the versions, since the boilerplate for setting up
+connections is about the same for both versions. When just looking at the core
+read/write loop, the difference is much more apparent: the C version is 38 lines
+of code, and the He-Man version is 5.
+
+The generated code is substantially longer than the C version, although not any
+slower in practice; it has 10 states in 240 lines of C. This echo server easily
+handles 10,000 concurrent, occasionally transmitting, connections.  With 10,000
+clients, the echo server uses about 40 MB of memory, almost entirely consisting
+of a 4 KB I/O buffer for each connection.
 
 \subsection{HTTP Server}
 
-To test the suitability of our system for more complicated programs
-and to demonstrate separating network logic and application logic, we
-built a simple (and bad) HTTP 1.0 server. The network logic is written
-in He-Man and request parsing is written in C. The C side is
-implemented as a function that takes a buffer and returns whether it
-forms a complete HTTP request and, if so, fills a buffer with the
-file name to serve. The entire server is 54 lines of He-Man Haskell and
-27 lines of C. It suffers from a number of major deficiencies, but is
-complete enough to benchmark.
+To test the suitability of our system for more complicated programs and to
+demonstrate separating network logic from application logic, we also built a
+very simple HTTP server. The network logic is written in He-Man; request parsing
+and response header building are implemented in C. Request parsing is handled by
+function which takes a buffer and returns whether it forms a complete HTTP
+request; if so, it fills a buffer with the file name to serve. The entire server
+is 68 lines of He-Man and 39 lines of C. Although it is very incomplete as an
+HTTP server, it is sufficient for benchmarking purposes. We add some useless
+headers for padding, to ensure that it sends the same amount of data as the
+complete servers we benchmark against.
 
-Our benchmark measurements are taken using ab, the Apache HTTP server
-benchmarking tool \cite{ApacheAB}. Measurements were collected by
-having a variable number of client threads request a file 100 times;
-the experiment was repeated with a 16 kilobyte file and a 128 kilobyte
-file. We ran the tests against both our He-Man HTTP server and Apache
-2.2.20, installed with the default Ubuntu 11.10 settings, except for
-client, thread, and process limits being adjusted upwards. Since the
-He-Man runtime is currently only single-threaded, we ran the Apache
-web server pinned to a single processor. Since the test repeatedly
-requests the same file, it will always be in the kernel's disk cache,
-and thus this test is not disk bound.
+Our benchmark measurements are taken using weighttp \cite{weighttp}, an http
+benchmarking tool associated with lighttpd.  Measurements were collected by
+requesting a file many times with a variable number of concurrent connections;
+the experiment was repeated with a 100 byte file (80,000 requests), a 16 KB file
+(30,000 requests), and a 128 KB file (8,000 requests). weighttp was run with 4
+threads making requests. Since the test repeatedly requests the same file, it
+should always be in the kernel's disk cache.
 
-For our experiments, the server ran Linux kernel 3.0.0 on a Lenovo
-Thinkpad W520 with a quad core 2.3 GHz Intel Core i7-2820QM and 8
-gigabytes of RAM, and the client ran on a Lenovo Thinkpad T500 with a
-Intel Core 2 Duo and 8 gigabytes of RAM.  % XXX: client specs
-The machines were connected by a gigabit Ethernet link.
-Unfortunately, ab is not particularly scalable, so we had trouble
-testing with more than 500 clients.
+For our experiments, both the client and server ran Linux kernel 2.6.32 on quad
+core 3.1 GHz Intel Core i5-2400 processors with 8 gigabytes of RAM. The machines
+were connected over a 100 megabit Ethernet network. We ran the tests on our
+He-Man HTTP server, Apache 2.2.14 (installed with the default Ubuntu 10.04 LTS
+settings, except for client, thread, and process limits being adjusted upwards),
+and Lighttpd 1.4.26 (installed with the default Ubuntu 10.04 LTS settings).
 
-Figure \ref{fig:graph128} compares our server to Apache for a 128 KB
-file. Our server performs nearly identically to Apache on this load.
-Figure \ref{fig:graph16} compares our server to Apache for a 16 KB
-file. In this scenario, we substantially outperform Apache. We
-conjecture this is because with a smaller file size, overhead for
-connection setup begins to dominate, and connection setup in He-Man
-consists of a few memory allocations whereas connection setup under
-Apache may require spawning new OS level threads.
+Each trial was run 10 times. The plots show the arithmetic mean of the number of
+requests per second handled by each server; error bars show the standard
+deviation.
 
-\begin{figure*}[!ht]
+% XXX work on the below paragraphs?
+
+Figure \ref{fig:graph100} compares the three servers while serving a
+very small (100 byte) file. Measurements with small files test the
+overhead of the web server more clearly than measurements with large
+files, which wind up testing how efficiently the kernel can transfer
+data. In this test, He-Man outperforms Apache and lighttpd across all
+of our measurements. This can be attributed to factors both in He-Man
+and in our server. He-Man imposes very low overhead and very low
+connection creation cost, which makes it easy to quickly handle many
+new connections. Our server is also much less featureful that Apache
+and lighttpd, which means it needs to do less. It is difficult to
+separate out these factors.
+
+Figure \ref{fig:graph128} and Figure \ref{fig:graph16} compares our
+server to Apache and lighttpd for 128 KB and 16 KB files. On these
+loads, our server performs nearly identically to Apache while being
+outperformed by the highly-turned lighttpd. In these tests, both
+Apache and He-Man begin to handle fewer requests per second above some
+number of concurrent requests (about 400 for the 16 KB file and 300
+for the 128 KB file). We investigated the He-Man httpd server's
+behavior in these tests, and found that the measured slowdown in
+requests/second occured when, after rapidly processing most of the
+requests in a test batch, a few requests would spend a very long time
+waiting to connect, causing a pause at the end of the run. During
+these pauses, both the client and the server were blocked in the
+kernel, waiting for network events. This strongly suggests to us that
+the problem is not with the He-Man compilation phase but that our web
+server would benefit from more careful tuning of network interactions
+(which may require improvements to the runtime).
+
+\begin{figure*}[htbp]
 \centering
-\includegraphics[width=0.9\textwidth]{graph_128K.pdf}
-\caption{Web server benchmark, 128 KB file.}
-\label{fig:graph128}
+\includegraphics[width=0.9\textwidth]{graph_100.pdf}
+\caption{Web server benchmark, 100 byte file.}
+\label{fig:graph100}
 \end{figure*}
-\begin{figure*}[!ht]
+\begin{figure*}[htbp]
 \centering
 \includegraphics[width=0.9\textwidth]{graph_16K.pdf}
 \caption{Web server benchmark, 16 KB file.}
 \label{fig:graph16}
 \end{figure*}
-\begin{figure*}[!ht]
+\begin{figure*}[htbp]
 \centering
-\includegraphics[width=0.9\textwidth]{graph_100.pdf}
-\caption{Web server benchmark, 100 B file.}
-\label{fig:graph100}
+\includegraphics[width=0.9\textwidth]{graph_128K.pdf}
+\caption{Web server benchmark, 128 KB file.}
+\label{fig:graph128}
 \end{figure*}
 
 \subsection{Memory Overhead}
 
-The per-thread memory overhead imposed by He-Man is very small: it
-consists of a thread id, list pointers for the scheduling queue, the
-next state to enter, a pointer to the most recently received event,
-and list heads and tails for lists of events owned by the thread and
-buffers owned by the thread (the latter two are so that we can
-automatically reclaim these resources when the thread exits). On a
-64-bit system, the total overhead comes out to 64 bytes, and could
-easily be reduced further (e.g., by using singly-linked lists).  For
-comparison, the default thread stack size under NPTL on Linux is 2
-megabytes.
-
-% see how many threads we can spawn with Memory.hs
+The per-thread memory overhead imposed by He-Man is very small: it consists of a
+thread id, list pointers for the scheduling queue, the next state to enter, a
+pointer to the most recently received event, and list heads and tails for lists
+of events owned by the thread and buffers owned by the thread.  (The event lists
+allow us to automatically reclaim resources when a thread exits). On a 64-bit
+system, the total overhead comes out to 64 bytes, and could be reduced further.
+For comparison, the default thread stack size under NPTL on Linux is 2 MB.
 
 \section{Related work}
 
-The C10K problem is particularly evident in the context of HTTP
-servers, which routinely maintain many concurrent connections. As we
-discussed in Section \ref{sec:evaluation}, Apache does not scale
-particularly well. The popular Lighttpd and Nginx HTTP server projects
-were both started with the explicit goal of outperforming Apache with
-respect to the C10K problem \cite{Lighttpd,Nginx}, and both use
-event-based architectures similar to He-Man.
+\subsection{Hybrid concurrency models}
 
-A number of functional languages support lightweight threads with
-user-space scheduling, most notably Erlang, which was designed for
-highly concurrent telecommunications applications, and easily scales
-to 20,000 clients \cite{Hellstrom}. The Haskell runtime supports a
-variety of concurrency primitives which permit a lightweight threaded
-programming model \cite{LiEtAl}.
+The Lauer-Needham duality \cite{LauerNeedham} between threaded and event-driven
+concurrency has given rise to a number of programming models attempting to
+bridge the gap between these abstractions. 
 
-%A number of custom network stack implementations exist for functional
-%languages, such as FoxNet for Standard ML \cite{BiagioniEtAl}, and
+Capriccio \cite{vonBehrenEtAl} is a user-level threading library which
+implements cooperative (non-preemptive) multithreading, and replaces blocking
+I/O primitives in \t{libc} with a wrapper for non-blocking I/O. Capriccio allows
+programmers to write C code in a threaded style, and performs a compiler
+analysis to statically allocate per-thread stack space. Capriccio's goals are
+similar to ours, but we feel that He-Man's approach of compiling to source is
+more portable and much simpler.
 
-He-Man is most similar to Li and Zdancewic's Haskell implementation of
-a hybrid event/thread programming model for network applications
-\cite{LiZdancewic}.  Their project has similar goals to ours, but is
-implemented entirely within Haskell. As a result, unlike He-Man, their
-framework requires entire applications to be written in Haskell, and
-incurs runtime overhead from the Haskell system.
+Flux \cite{BurnsEtAl} is a domain-specific language intended, like He-Man, to
+handle concurrency in network applications separately from the rest of the
+application's logic. Flux allows programmers to declaratively specify how data
+flows through the server's components, and compiles to a threaded or
+event-driven runtime which implements this behavior concurrently. Flux source
+code cannot express loops, except for an implicit outermost loop, as a way of
+preventing deadlocks; He-Man allows more expressive control flow while making
+the same guarantee.
 
+Many functional programming languages present a native lightweight thread
+abstraction. Erlang \cite{VirdingEtAl} was designed for highly concurrent
+telecommunications applications, and easily scales to 20,000 clients
+\cite{Hellstrom}. Concurrent ML \cite{ReppyEtAl} adds concurrency primitives to
+Standard ML, implemented with front-end continuations, and a back-end
+synchronization protocol. The GHC Haskell runtime supports concurrency
+primitives \cite{LiEtAl} by scheduling lightweight threads onto a small number
+of kernel threads \cite{MarlowEtAl}.
 
-%% XXX: needs serious work
-\section{Future work}
+Li and Zdancewic \cite{LiZdancewic} have developed a hybrid concurrency monad in
+Haskell for building scalable network applications. Their implementation uses
+the CPS monad to represent computations as continuations in a ready queue, and
+gives the illusion that I/O is blocking in each thread, while it is actually
+handled with foreign calls to \t{epoll}. This concurrency monad is executed in
+Haskell, unlike He-Man programs, which are compiled for speed and portability
+\cite{ElliottEtAl}.
 
-We also plan to expand the language with the ability to declare functions and
-make non-external function calls within a thread. This will make code simpler
-and shorter by allowing the programmer to abstract away common functionality
-like read and write loops.
+\subsection{Functional network programming}
 
-In the runtime, our current thread \t{struct}s are larger than necessary.
-Because the runtime allocates a \t{struct} on every thread spawn, we should
-replace our \t{malloc} calls with calls to a custom slab allocator.
+In addition to the concurrency models mentioned above, a number of functional
+languages have network libraries specifically tailored to concurrency issues,
+like Erlang's TCP/IP suite \cite{ParisEtAl}, and the FoxNet library for Standard
+ML \cite{BiagioniEtAl}, which uses continuations to implement coroutines for
+cooperative multithreading.
 
-We also hope to implement observable sharing, as in \cite{Gill}, to allow the
-same thread to have distinct spawn sites without code duplication. This does not
-add inefficiency, but does increase the size of our output code. 
+Cooperative multithreading (as in Capriccio, FoxNet, and He-Man) is more
+performant in this domain than preemption, because it avoids unnecessary context
+switches and executes only unblocked threads. On the other hand, the scheduler
+is only invoked when a thread voluntarily yields, so a thread may monopolize
+execution time if it never yields. Placing bounds on execution time is a
+difficult problem in general, and has been studied in the context of grid
+computing \cite{VanderwaartCrary}. The He-Man compiler guarantees that no code
+block contains an infinite loop; unbounded execution can only occur in calls to
+external functions.
 
-\section{Conclusions}
-Expressing network application logic as a compiled, embedded, domain
-specific language is an elegant and practical way to build scalable
-network applications without having to manually write state-machine
-based event-loop code. Embedding the language in Haskell allows
-powerful metaprogramming and allowed the language to be developed with
-a fraction of the effort of building a full language. Compiling to C
-allows C programmers to write parts of their system (for example, the
-caching layer) in C while writing the network logic in
-straightforward, straight-line He-Man code.
+The Scheme community often uses continuations to develop web applications which
+robustly handle client state despite the statelessness of HTTP. This can be
+accomplished either by CPSing a direct-style program \cite{GraunkeEtAl} or by
+modifying a HTTP server to explicitly store continuations \cite{Queinnec}.
 
+\section{Conclusion}
 
-\pagebreak
+The Lauer-Needham duality suggests that the performance of event-driven
+concurrent code should be achievable with simpler threaded semantics. We propose
+a model of network application programming which completely separates I/O logic,
+which requires a tuned concurrent implementation, from largely single-threaded
+protocol and implementation details. 
+
+We present He-Man, a domain-specific language for expressing network application
+I/O in a straightforward threaded abstraction, which compiles to efficient
+event-driven C code. We demonstrate that it is practical to build efficient
+network applications with a combination of He-Man and C code, and unlike other
+hybrid concurrency systems, the He-Man runtime is very compact and easily
+modified.
+
 \bibliography{citations}{}
 \bibliographystyle{abbrvnat}
 

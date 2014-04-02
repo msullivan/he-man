@@ -4,7 +4,7 @@ import sys
 from scipy.stats import stats
 import Gnuplot, Gnuplot.funcutils
 
-port_map = {"80": "Apache", "81": "lighttpd", "8080": "HeMan"}
+port_map = {"80": "Apache", "81": "lighttpd", "8080": "He-Man"}
 
 def process_file(file_name):
     _, it, size, conns, port = file_name.split("_")
@@ -52,11 +52,11 @@ def graph(size, table):
     g('set style data errorlines')
     g('set yrange [0:]')
     g('set xrange [0:525]') # XXX: change if we change max conns
-    g.xlabel('# of Concurrent requests')
+    g.xlabel('# of concurrent requests')
     g.ylabel('Requests/second')
 
     lines = []
-    for server, data in table.items():
+    for server, data in sorted(table.items()):
         xs, ys, stds = zip(*data)
         lines.append(Gnuplot.Data(xs, ys, stds, title=server))
     g.itemlist = lines

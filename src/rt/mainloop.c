@@ -43,6 +43,7 @@ static struct {
 	pthread_mutex_t sched_lock;
 #endif
 	thread_queue_t sched_queue;
+	int events_until_epoll;
 } state;
 
 static inline void sched_lock(void) {
@@ -158,6 +159,12 @@ void register_nb_event(thread_t *thread, event_t *e)
 	// helgrind will report a data race having to do with this, but
 	// I'm pretty sure it's actually fine. The event pointer is handed
 	// off through epoll.
+
+	// XXX: Actually, there is maybe a concurrency hazard since another
+	// thread could pick up the event in epoll immediately and try
+	// to run this thread before it has returned fully. This should
+	// be fine, though, since nothing else will be happening to this
+	// thread.
 	e->thread = thread;
 	// XXX: this only makes sense for epoll events, not AIO ones
 	if (epoll_ctler(EPOLL_CTL_MOD, e->u.nb.fd,
@@ -319,7 +326,25 @@ static void run_thread(void *threadp)
 }
 
 // A single threaded main loop
-void *work_loop(void *p)
+void work_loop(void)
+{
+	for (;;) {
+		thread_t *thread;
+		if ((thread = Q_GET_HEAD(&state.sched_queue))) {
+			Q_REMOVE(&state.sched_queue, thread, q_link);
+			run_thread(thread);
+			state.events_until_epoll--;
+		}
+		bool can_sleep = !Q_GET_HEAD(&state.sched_queue);
+		if (can_sleep || state.events_until_epoll == 0) {
+			do_poll(can_sleep);
+			state.events_until_epoll = Q_GET_SIZE(&state.sched_queue);
+		}
+	}
+}
+
+// A multithreaded main loop
+void *work_loop_mt(void *p)
 {
 	for (;;) {
 		thread_t *thread;
@@ -337,17 +362,20 @@ void *work_loop(void *p)
 	return NULL;
 }
 
+
 void main_loop(void)
 {
+	state.events_until_epoll = Q_GET_SIZE(&state.sched_queue);
+
 #if MT_RUNTIME
 	pthread_t thread;
 	for (int i = 0; i < thread_count - 1; i++) {
-		int ret = pthread_create(&thread, NULL, work_loop, NULL);
+		int ret = pthread_create(&thread, NULL, work_loop_mt, NULL);
 		if (ret != 0) fail(1, "pthread_create");
 	}
 #endif
 
-	work_loop(NULL);
+	work_loop();
 }
 
 
