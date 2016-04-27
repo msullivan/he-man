@@ -33,6 +33,7 @@ bool write_state(struct thread_t *thread)
 	int left = e->amt_read - e->amt_written;
 	int count = write(e->fd, e->buf + e->amt_written, left);
 	if (count < 0 && errno == EAGAIN) {
+		prepare_event(e->event, EVENT_WR);
 		register_event(thread, e->event);
 		return false;
 	} else if (count <= 0) {
@@ -45,18 +46,26 @@ bool write_state(struct thread_t *thread)
 		e->amt_written = e->amt_read = 0;
 		thread->cont = read_state;
 	}
-	
+
 	return true;
 }
 
+// This is stupid.
+bool sleep_state(struct thread_t *thread) {
+	event_t *sleep_ev = setup_sleep_event(thread, 500);
+	thread->cont = write_state;
+	register_event(thread, sleep_ev);
+	return false;
+}
 
 bool read_state(struct thread_t *thread)
 {
 	echo_thread_t *e = (echo_thread_t *)thread;
 	thread->cont = read_state;
-	
+
 	int count = read(e->fd, e->buf, sizeof(e->buf));
 	if (count < 0 && errno == EAGAIN) {
+		prepare_event(e->event, EVENT_RD);
 		register_event(thread, e->event);
 		return false;
 	} else if (count <= 0) {
@@ -66,7 +75,7 @@ bool read_state(struct thread_t *thread)
 
 	e->amt_read = count;
 	e->amt_written = 0;
-	thread->cont = write_state;
+	thread->cont = sleep_state;
 
 	return true;
 }
@@ -87,7 +96,7 @@ bool accept_state(struct thread_t *thread)
 {
 	echo_thread_t *e = (echo_thread_t *)thread;
 	thread->cont = accept_state;
-	
+
 	int fd = accept(e->fd, NULL, NULL);
 	if (fd < 0 && errno == EAGAIN) {
 		register_event(thread, e->event);
@@ -111,15 +120,16 @@ bool setup(struct thread_t *thread)
 	if (e->fd < 0) fail(1, "socket");
 
 	make_socket_non_blocking(e->fd);
+	set_sock_reuse(e->fd);
 
 	sock_bind_v4(e->fd, INADDR_ANY, port);
-	
+
 	if (listen(e->fd, Q_LIMIT) < 0) fail(1, "listen");
 
 	e->event = mk_nb_event(thread, e->fd, EVENT_RD);
 
 	thread->cont = accept_state;
-	
+
 	return true;
 }
 
@@ -130,7 +140,7 @@ int main(int argc, char *argv[])
 	process_name = argv[0];
 
 	if (argc == 2) port = atoi(argv[1]);
-	
+
 	echo_thread_t *main_thread = mk_echo_thread();
 	main_thread->thread.cont = setup;
 	make_runnable(&main_thread->thread);

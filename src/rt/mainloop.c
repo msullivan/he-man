@@ -41,6 +41,9 @@ static struct {
 #endif
 	rt_mutex_t sched_lock;
 	thread_queue_t sched_queue;
+	// Sorted queue of sleeping threads; the "right thing" would be a
+	// priority queue or something
+	thread_queue_t sleep_queue;
 	int events_until_epoll;
 } state;
 
@@ -127,6 +130,68 @@ static void free_nb_event(event_t *event)
 	free(event);
 }
 
+
+//// Time garbage
+// sigh. the C++ standard library has really nice time facilities.
+
+// timespecs technically represent /points/ in time, not durations,
+// so strictly speaking all of this time_norm/time_diff stuff is an abuse.
+// N.B time_norm will normalize all "negative" timespecs to have a
+// negative tv_sec
+struct timespec time_norm(struct timespec t) {
+	if (t.tv_nsec > 1000000000 || t.tv_nsec < 0) {
+		int sign = t.tv_nsec < 0 ? 1 : -1;
+		t.tv_nsec += sign * 1000000000;
+		t.tv_sec -= sign;
+	}
+	return t;
+}
+
+struct timespec time_diff(struct timespec t1, struct timespec t0)
+{
+	struct timespec temp = {.tv_sec = t1.tv_sec-t0.tv_sec,
+	                        .tv_nsec = t1.tv_nsec-t0.tv_nsec};
+	return time_norm(temp);
+}
+int time_lt(struct timespec t0, struct timespec t1)
+{
+	return time_diff(t0, t1).tv_sec < 0;
+}
+
+// Compute the timeout in millis
+int compute_timeout(struct timespec wakeup)
+{
+	// don't sleep on null timeout
+	if (!wakeup.tv_sec && !wakeup.tv_nsec) return -1;
+
+	// compute actual timeout
+	struct timespec time;
+	clock_gettime(CLOCK_REALTIME, &time);
+	struct timespec diff = time_diff(wakeup, time);
+	if (diff.tv_sec < 0) return 0;
+
+	int millis = diff.tv_sec*1000 + diff.tv_nsec/1000000;
+	if (!millis && diff.tv_nsec) millis++; // round up to 1ms
+	return millis;
+}
+
+
+event_t *setup_sleep_event_abs(thread_t *t, struct timespec timeout)
+{
+	event_t *ev = &t->sleep_event;
+	ev->type = EVENT_SLEEP;
+	ev->u.wakeup = timeout;
+	return ev;
+}
+
+event_t *setup_sleep_event(thread_t *t, int timeout_millis)
+{
+	struct timespec timeout;
+	clock_gettime(CLOCK_REALTIME, &timeout);
+	timeout.tv_nsec += 1000000*timeout_millis;
+	return setup_sleep_event_abs(t, time_norm(timeout));
+}
+
 static void free_buf(buf_t *buf)
 {
 	free(buf);
@@ -181,6 +246,19 @@ void register_channel_event(thread_t *thread, event_t *e)
 	rt_mutex_unlock(&ch->lock);
 }
 
+void register_sleep_event(thread_t *me, event_t *e)
+{
+	sched_lock();
+	thread_t *t;
+	Q_SEARCH(t, &state.sleep_queue, q_link,
+	         time_lt(e->u.wakeup, t->sleep_event.u.wakeup));
+	if (t) {
+		Q_INSERT_BEFORE(&state.sleep_queue, t, me, q_link);
+	} else {
+		Q_INSERT_TAIL(&state.sleep_queue, me, q_link);
+	}
+	sched_unlock();
+}
 
 void register_event(thread_t *thread, event_t *e)
 {
@@ -191,9 +269,11 @@ void register_event(thread_t *thread, event_t *e)
 	case EVENT_CHANNEL:
 		register_channel_event(thread, e);
 		break;
+	case EVENT_SLEEP:
+		register_sleep_event(thread, e);
+		break;
 	}
 }
-
 
 int epoll_ctler(int op, int fd, uint32_t events, void *ptr)
 {
@@ -202,6 +282,29 @@ int epoll_ctler(int op, int fd, uint32_t events, void *ptr)
 	ev.data.ptr = ptr;
 	return epoll_ctl(state.epoll_fd, op, fd, &ev);
 }
+
+
+// need to have the sched lock
+struct timespec get_next_wakeup(void) {
+	struct timespec empty = {0, 0};
+	if (Q_GET_HEAD(&state.sleep_queue)) {
+		return Q_GET_HEAD(&state.sleep_queue)->sleep_event.u.wakeup;
+	}
+	return empty;
+}
+// need to have the sched lock
+void wakeup_sleepers(void) {
+	struct timespec time;
+	clock_gettime(CLOCK_REALTIME, &time);
+
+	thread_t *t;
+	while ((t = Q_GET_FRONT(&state.sleep_queue)) &&
+	       time_lt(t->sleep_event.u.wakeup, time)) {
+		Q_REMOVE(&state.sleep_queue, t, q_link);
+		Q_INSERT_TAIL(&state.sched_queue, t, q_link);
+	}
+}
+
 
 void make_runnable(thread_t *t)
 {
@@ -273,7 +376,7 @@ static void handle_epoll_event(struct epoll_event *event)
 
 // Poll epoll and aio and handle any events. If can_sleep is true
 // and no aio events are expected, epoll will block.
-static void do_poll(bool can_sleep)
+static void do_poll(bool can_sleep, struct timespec next_wakeup)
 {
 	struct epoll_event epoll_events[MAX_EVENTS];
 #if ENABLE_AIO
@@ -298,7 +401,8 @@ static void do_poll(bool can_sleep)
 
 	// If we aren't expecting aio, block indefinitely, otherwise
 	// just poll.
-	int epoll_timeout = expect_aio || !can_sleep ? 0 : -1;
+	int epoll_timeout = expect_aio || !can_sleep ? 0 :
+		compute_timeout(next_wakeup);
 	int epoll_cnt = epoll_wait(state.epoll_fd, epoll_events,
 	                           MAX_EVENTS, epoll_timeout);
 	for (int i = 0; i < epoll_cnt; i++) {
@@ -341,8 +445,10 @@ void work_loop(void)
 		}
 		bool can_sleep = !Q_GET_HEAD(&state.sched_queue);
 		if (can_sleep || state.events_until_epoll == 0) {
-			do_poll(can_sleep);
+			struct timespec next_wakeup = get_next_wakeup();
+			do_poll(can_sleep, next_wakeup);
 			state.events_until_epoll = Q_GET_SIZE(&state.sched_queue);
+			wakeup_sleepers(); // maybe not every time through?
 		}
 	}
 }
@@ -353,6 +459,7 @@ void *work_loop_mt(void *p)
 	for (;;) {
 		thread_t *thread;
 		sched_lock();
+		wakeup_sleepers(); // maybe not every time through?
 		if ((thread = Q_GET_HEAD(&state.sched_queue))) {
 			Q_REMOVE(&state.sched_queue, thread, q_link);
 			sched_unlock();
@@ -360,8 +467,9 @@ void *work_loop_mt(void *p)
 			sched_lock();
 		}
 		bool can_sleep = !Q_GET_HEAD(&state.sched_queue);
+		struct timespec next_wakeup = get_next_wakeup();
 		sched_unlock();
-		do_poll(can_sleep);
+		do_poll(can_sleep, next_wakeup);
 	}
 	return NULL;
 }

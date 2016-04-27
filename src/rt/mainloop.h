@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
 #include "variable_queue.h"
 
 #if MT_RUNTIME
@@ -27,8 +28,12 @@ static inline int rt_atomic_fetch_add(int *p, int amt) {
 }
 #endif
 
-typedef enum event_type_t { EVENT_NB, EVENT_CHANNEL, /* EVENT_AIO */ }
-	event_type_t;
+typedef enum event_type_t {
+	EVENT_NB,
+	EVENT_CHANNEL,
+	EVENT_SLEEP,
+	/* EVENT_AIO, */
+} event_type_t;
 
 extern int next_tid;
 
@@ -57,6 +62,7 @@ typedef struct event_t {
 	union {
 		struct {int fd; int mode;} nb;
 		struct channel_t *ch;
+		struct timespec wakeup;
 	} u;
 	struct thread_t *thread;
 } event_t;
@@ -95,6 +101,7 @@ typedef struct buf_t {
 typedef struct thread_t {
 	Q_NEW_LINK(thread_t) q_link;
 	int tid;
+	event_t sleep_event;
 	event_queue_t nb_events;
 	buf_queue_t bufs;
 	thread_cont *cont;
@@ -113,6 +120,8 @@ channel_t *new_channel(void);
 void channel_send(channel_t *ch, int tag, data_t payload);
 msg_data_t channel_recv(channel_t *ch);
 
+event_t *setup_sleep_event(thread_t *t, int millis);
+event_t *setup_sleep_event_abs(thread_t *t, struct timespec time);
 event_t *mk_nb_event(thread_t *t, int fd, int mode);
 int epoll_ctler(int op, int fd, uint32_t events, void *ptr);
 void make_runnable(struct thread_t *t);
