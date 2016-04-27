@@ -26,7 +26,7 @@
 #define MAX_EVENTS 64
 #define MAX_AIO_EVENTS 100 // dunno what this should be...
 #define MAX_ITERS 50
-#define MAX_THREADS 1
+#define MAX_THREADS 8
 
 int thread_count = MAX_THREADS;
 
@@ -39,34 +39,28 @@ static struct {
 	int aio_eventfd;
 	struct event_t *aio_dummy_event;
 #endif
-#if MT_RUNTIME
-	pthread_mutex_t sched_lock;
-#endif
+	rt_mutex_t sched_lock;
 	thread_queue_t sched_queue;
 	int events_until_epoll;
 } state;
 
 static inline void sched_lock(void) {
-#if MT_RUNTIME
-	pthread_mutex_lock(&state.sched_lock);
-#endif
+	rt_mutex_lock(&state.sched_lock);
 }
 static inline void sched_unlock(void) {
-#if MT_RUNTIME
-	pthread_mutex_unlock(&state.sched_lock);
-#endif
+	rt_mutex_unlock(&state.sched_lock);
 }
 
 // refcount stuff
 void inc_refcount(void *p) {
 	int *rc = p;
 	assert(*rc > 0);
-	(*rc)++; // XXX: smp
+	rt_atomic_fetch_add(rc, 1);
 }
 void dec_refcount(void *p) {
 	int *rc = p;
 	assert(*rc > 0);
-	if (!--(*rc)) // XXX: smp
+	if (!rt_atomic_fetch_add(rc, -1))
 		free(p);
 }
 
@@ -96,6 +90,7 @@ channel_t *new_channel(void) {
 	channel_t *ch = calloc(1, sizeof(channel_t));
 	if (!ch) fail(1, "allocating channel");
 	ch->rc = 1;
+	rt_mutex_init(&ch->lock);
 	ch->ev.type = EVENT_CHANNEL;
 	ch->ev.u.ch = ch;
 	return ch;
@@ -174,15 +169,16 @@ void register_nb_event(thread_t *thread, event_t *e)
 
 void register_channel_event(thread_t *thread, event_t *e)
 {
-	// XXX: locking
 	channel_t *ch = e->u.ch;
 
 	// if there is data in the channel, keep running
+	rt_mutex_lock(&ch->lock);
 	if (Q_GET_HEAD(&ch->msgs)) {
 		make_runnable(thread);
 	} else {
 		e->thread = thread;
 	}
+	rt_mutex_unlock(&ch->lock);
 }
 
 
@@ -228,24 +224,32 @@ static void handle_event(event_t *event)
 
 void channel_send(channel_t *ch, int tag, data_t payload)
 {
-	// XXX: locking
 	msg_t *msg = calloc(1, sizeof(msg_t));
 	if (!msg) fail(1, "allocating msg");
 	msg->data.tag = tag;
 	msg->data.payload = payload;
+
+	rt_mutex_lock(&ch->lock);
 	Q_INSERT_TAIL(&ch->msgs, msg, q_link);
 	handle_event(&ch->ev);
+	rt_mutex_unlock(&ch->lock);
 }
 msg_data_t channel_recv(channel_t *ch)
 {
 	msg_data_t ret = {-1, {0}};
 	msg_t *msg;
-	// XXX: locking
+
+	rt_mutex_lock(&ch->lock);
 	if ((msg = Q_GET_HEAD(&ch->msgs))) {
 		Q_REMOVE(&ch->msgs, msg, q_link);
 		ret = msg->data;
+
+		rt_mutex_unlock(&ch->lock);
 		free(msg);
+	} else {
+		rt_mutex_unlock(&ch->lock);
 	}
+
 
 	return ret;
 }
@@ -373,22 +377,25 @@ void main_loop(void)
 		int ret = pthread_create(&thread, NULL, work_loop_mt, NULL);
 		if (ret != 0) fail(1, "pthread_create");
 	}
-#endif
-
+	work_loop_mt(NULL);
+#else
 	work_loop();
+#endif
 }
 
 
 void setup_main_loop(void)
 {
-	int ret;
-
 	signal(SIGPIPE, SIG_IGN);
 
 	state.epoll_fd = epoll_create(1);
 	if (state.epoll_fd < 0) fail(1, "epoll_create");
 
+	rt_mutex_init(&state.sched_lock);
+
 #if ENABLE_AIO
+	int ret;
+
 	static event_t aio_dummy_event;
 	state.aio_dummy_event = &aio_dummy_event;
 

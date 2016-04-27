@@ -5,6 +5,28 @@
 #include <stdint.h>
 #include "variable_queue.h"
 
+#if MT_RUNTIME
+#include <pthread.h>
+typedef pthread_mutex_t rt_mutex_t;
+#define rt_mutex_init(p) pthread_mutex_init(p, NULL)
+#define rt_mutex_lock(p) pthread_mutex_lock(p)
+#define rt_mutex_unlock(p) pthread_mutex_unlock(p)
+static inline int rt_atomic_fetch_add(int *p, int amt) {
+	return __sync_fetch_and_add(p, amt);
+}
+#else
+typedef struct { } rt_mutex_t;
+static inline int __dummy_func() { return 0; }
+#define rt_mutex_init(p) __dummy_func()
+#define rt_mutex_lock(p) __dummy_func()
+#define rt_mutex_unlock(p) __dummy_func()
+static inline int rt_atomic_fetch_add(int *p, int amt) {
+	int val = *p;
+	*p += amt;
+	return val;
+}
+#endif
+
 typedef enum event_type_t { EVENT_NB, EVENT_CHANNEL, /* EVENT_AIO */ }
 	event_type_t;
 
@@ -14,7 +36,7 @@ extern int next_tid;
     struct thread_name *mk_ ## thread_name(void) { \
         struct thread_name *t = calloc(1, sizeof(struct thread_name)); \
         if (!t) fail(1, "allocating thread"); \
-        t->thread.tid = next_tid++;  /* XXX: concurrency hazard */ \
+        t->thread.tid = rt_atomic_fetch_add(&next_tid, 1); \
         return t; \
     }
 
@@ -57,6 +79,7 @@ typedef struct msg_t {
 
 typedef struct channel_t {
 	int rc;
+	rt_mutex_t lock;
 	msg_queue_t msgs;
 	struct event_t *pending_event;
 	event_t ev;
